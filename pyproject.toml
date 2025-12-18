@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kai-code"
+version = "0.1.0"
+description = "DeepAgents-based Python coding agent (port-inspired by letta-code)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Kai Code" }]
+
+dependencies = [
+  "deepagents>=0.2.8",
+]
+
+[project.optional-dependencies]
+openai = ["langchain-openai>=0.2.0"]
+anthropic = ["langchain-anthropic>=0.2.0"]
+google_genai = ["langchain-google-genai>=2.0.0"]
+
+[project.urls]
+Homepage = "https://github.com/fitrakacamarga/bmad-new"
+
+[project.scripts]
+kai = "kai_code.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kai_code"]
