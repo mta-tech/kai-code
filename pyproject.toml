@@ -27,6 +27,7 @@ Homepage = "https://github.com/fitrakacamarga/bmad-new"
 
 [project.scripts]
 kai = "kai_code.cli:main"
+kai-code = "kai_code.cli:main"
 
 [dependency-groups]
 dev = [
