@@ -5,6 +5,7 @@ from pathlib import Path
 from textual.app import App
 from textual.binding import Binding
 
+from ..agent import KaiAgent
 from .screens.main import MainScreen
 from .widgets import (
     StatusBar,
@@ -52,6 +53,19 @@ class KaiCodeApp(App):
         self._commands = CommandRegistry()
         self._agent = None  # Will hold KaiAgent instance
         self._streaming = False
+        self._init_agent()
+
+    def _init_agent(self) -> None:
+        """Initialize the agent."""
+        try:
+            self._agent = KaiAgent(
+                root_dir=self.root_dir,
+                model=self._model if self._model != "default" else None,
+                yolo=self._yolo,
+            )
+        except Exception as e:
+            # Agent initialization can fail if no API key is set
+            self._agent = None
 
     def on_mount(self) -> None:
         """Set up the app on mount."""
@@ -104,12 +118,56 @@ class KaiCodeApp(App):
         message_list = self.query_one("#message-list", MessageList)
         message_list.add_message(MessageRole.USER, text)
 
-        # TODO: Send to agent and stream response
-        # For now, just echo back
-        message_list.add_message(
-            MessageRole.ASSISTANT,
-            f"[TUI Demo] You said: {text}\n\nAgent integration coming soon...",
-        )
+        # Run agent
+        self.run_worker(self._run_agent_stream(text))
+
+    async def _run_agent_stream(self, prompt: str) -> None:
+        """Run agent and stream response to UI."""
+        if not self._agent:
+            message_list = self.query_one("#message-list", MessageList)
+            message_list.add_message(
+                MessageRole.ERROR,
+                "No agent available. Check API key configuration.",
+            )
+            return
+
+        message_list = self.query_one("#message-list", MessageList)
+        tool_panel = self.query_one("#tool-panel", ToolPanel)
+
+        self._streaming = True
+        streaming_msg = message_list.add_streaming_message(MessageRole.ASSISTANT)
+
+        try:
+            # The agent.stream() returns an iterator of response chunks
+            # We need to process these chunks and update the UI
+            for chunk in self._agent.stream(prompt):
+                # Extract content from chunk
+                # The chunk is a dict with messages
+                if isinstance(chunk, dict) and isinstance(chunk.get("messages"), list):
+                    messages = chunk.get("messages", [])
+                    if messages:
+                        # Get the last message
+                        last_msg = messages[-1]
+                        # Extract content based on message type
+                        if isinstance(last_msg, dict):
+                            content = last_msg.get("content", "")
+                        else:
+                            # Handle LangChain BaseMessage
+                            content = getattr(last_msg, "content", "")
+
+                        # Update streaming message with full content
+                        # (since we get full state each time)
+                        if content and isinstance(content, str):
+                            # Replace content instead of appending since we get full state
+                            streaming_msg._content = content
+                            streaming_msg._refresh_display()
+
+        except Exception as e:
+            message_list.add_message(MessageRole.ERROR, f"Error: {e}")
+        finally:
+            self._streaming = False
+            message_list.finish_streaming()
+            tool_panel.reset()
 
     def _show_help(self) -> None:
         """Show help text."""
