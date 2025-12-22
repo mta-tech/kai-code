@@ -1,0 +1,42 @@
+instructions:
+  - condition: Always
+    rules: |
+      - Use snake_case for all identifiers
+      - Include created_at and updated_at in all staging models when available
+      - Never use SELECT * in final output
+      - Always cast data types explicitly
+      - Use CTEs for readability (source, cleaned, final pattern)
+    is_default: true
+
+  - condition: When creating staging models
+    rules: |
+      - Materialize as view
+      - Name with stg_{source}__{entity} pattern
+      - 1:1 mapping with source table
+      - Only do cleaning and type casting
+      - No business logic
+    is_default: false
+
+  - condition: When creating fact tables
+    rules: |
+      - Include surrogate key using dbt_utils.generate_surrogate_key
+      - Materialize as table
+      - Add row count validation test
+      - Include timestamp columns (created_at, updated_at)
+    is_default: false
+
+  - condition: When creating incremental models
+    rules: |
+      - Define unique_key for deduplication
+      - Use merge strategy when possible
+      - Include is_incremental() guard
+      - Add full_refresh test coverage
+    is_default: false
+
+  - condition: When handling PII
+    rules: |
+      - Hash email addresses in non-production environments
+      - Never expose raw phone numbers
+      - Tag columns with meta.pii: true in schema.yml
+      - Consider data retention policies
+    is_default: false

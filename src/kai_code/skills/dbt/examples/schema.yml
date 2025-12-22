@@ -1,0 +1,72 @@
+version: 2
+
+models:
+  - name: stg_ecommerce__orders
+    description: Staging layer for raw orders data. 1:1 with source.
+    columns:
+      - name: order_id
+        description: Primary key for orders
+        tests:
+          - unique
+          - not_null
+      - name: customer_id
+        description: Foreign key to customers table
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_ecommerce__customers')
+              field: customer_id
+      - name: order_status
+        description: Current status of the order
+        tests:
+          - accepted_values:
+              values: ['PENDING', 'COMPLETED', 'CANCELLED', 'REFUNDED']
+      - name: quantity
+        description: Number of items ordered
+        tests:
+          - not_null
+      - name: line_total
+        description: Calculated total for this order line
+      - name: created_at
+        description: Timestamp when the order was created
+        tests:
+          - not_null
+
+  - name: fct_orders
+    description: Fact table for order metrics and analysis
+    columns:
+      - name: order_sk
+        description: Surrogate key for the order
+        tests:
+          - unique
+          - not_null
+      - name: order_id
+        description: Natural key from source system
+        tests:
+          - unique
+          - not_null
+      - name: customer_id
+        tests:
+          - not_null
+      - name: order_total
+        description: Total value of the order
+      - name: order_date
+        description: Date the order was placed
+        tests:
+          - not_null
+
+sources:
+  - name: ecommerce
+    description: Raw e-commerce data from the transactional database
+    database: raw
+    schema: ecommerce
+    tables:
+      - name: orders
+        description: Raw orders table
+        columns:
+          - name: order_id
+            description: Primary key
+          - name: customer_id
+            description: Customer who placed the order
+          - name: created_at
+            description: Order creation timestamp

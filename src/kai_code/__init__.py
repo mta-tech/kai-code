@@ -1,0 +1,98 @@
+from importlib import metadata
+
+try:
+    __version__ = metadata.version("kai-code")
+except Exception:  # pragma: no cover
+    __version__ = "0.0.0"
+
+from .agent import KaiAgent, KaiAgentConfig, KaiResult
+from .client import KaiClient, getClient, get_client
+from .create import CreateAgentResult, createAgent, create_agent
+from .headless import handleHeadlessCommand, handle_headless_command
+from .model import (
+    ModelInfo,
+    format_available_models,
+    formatAvailableModels,
+    get_default_model,
+    getDefaultModel,
+    get_model_info,
+    getModelInfo,
+    get_model_update_args,
+    getModelUpdateArgs,
+    models,
+    resolve_model,
+    resolveModel,
+)
+from .modify import (
+    LinkResult,
+    SystemPromptUpdateResult,
+    UnlinkResult,
+    link_tools_to_agent,
+    unlink_tools_from_agent,
+    update_agent_llm_config,
+    update_agent_system_prompt,
+    updateAgentLLMConfig,
+    linkToolsToAgent,
+    unlinkToolsFromAgent,
+    updateAgentSystemPrompt,
+)
+from .permissions import PermissionConfig
+from .permission_mode import (
+    PermissionMode,
+    VALID_PERMISSION_MODES,
+    PermissionModeResolution,
+    resolve_permission_mode,
+)
+from .project_settings import KaiProjectSettings
+
+# Optional dbt agent - requires dbt extra
+try:
+    from .agents.dbt import DbtAgent
+except ImportError:
+    DbtAgent = None  # type: ignore[misc, assignment]
+
+__all__ = [
+    "__version__",
+    "KaiAgent",
+    "KaiAgentConfig",
+    "KaiResult",
+    "KaiClient",
+    "get_client",
+    "getClient",
+    "CreateAgentResult",
+    "create_agent",
+    "createAgent",
+    "handle_headless_command",
+    "handleHeadlessCommand",
+    "ModelInfo",
+    "models",
+    "resolve_model",
+    "resolveModel",
+    "get_default_model",
+    "getDefaultModel",
+    "format_available_models",
+    "formatAvailableModels",
+    "get_model_info",
+    "getModelInfo",
+    "get_model_update_args",
+    "getModelUpdateArgs",
+    "update_agent_llm_config",
+    "update_agent_system_prompt",
+    "link_tools_to_agent",
+    "unlink_tools_from_agent",
+    "LinkResult",
+    "UnlinkResult",
+    "SystemPromptUpdateResult",
+    "updateAgentLLMConfig",
+    "linkToolsToAgent",
+    "unlinkToolsFromAgent",
+    "updateAgentSystemPrompt",
+    "PermissionConfig",
+    "PermissionMode",
+    "VALID_PERMISSION_MODES",
+    "PermissionModeResolution",
+    "resolve_permission_mode",
+    "KaiProjectSettings",
+    # dbt agent (optional)
+    "DbtAgent",
+]
