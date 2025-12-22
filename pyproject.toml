@@ -42,9 +42,9 @@ dbt-postgres = ["psycopg[binary]>=3.0.0"]
 Homepage = "https://github.com/fitrakacamarga/bmad-new"
 
 [project.scripts]
-kai = "kai_code.cli:main"
-kai-code = "kai_code.cli:main"
-kai-rich = "kai_code.rich_main:cli_main"
+kai = "kai_code.rich_main:cli_main"
+kai-code = "kai_code.rich_main:cli_main"
+kai-basic = "kai_code.cli:main"
 
 [dependency-groups]
 dev = [
