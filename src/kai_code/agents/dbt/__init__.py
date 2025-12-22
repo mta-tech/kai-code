@@ -1,4 +1,11 @@
 """DbtAgent - specialized agent for dbt data engineering."""
+from kai_code.agents.dbt.adapters import (
+    DatabaseAdapter,
+    DuckDBAdapter,
+    PostgreSQLAdapter,
+    get_adapter,
+)
+from kai_code.agents.dbt.agent import DbtAgent
 from kai_code.agents.dbt.models import (
     CardinalityInfo,
     ColumnInfo,
@@ -8,9 +15,17 @@ from kai_code.agents.dbt.models import (
 )
 
 __all__ = [
-    "CardinalityInfo",
+    # Agent
+    "DbtAgent",
+    # Models
+    "TableInfo",
     "ColumnInfo",
     "ForeignKeyInfo",
+    "CardinalityInfo",
     "QueryResult",
-    "TableInfo",
+    # Adapters
+    "DatabaseAdapter",
+    "DuckDBAdapter",
+    "PostgreSQLAdapter",
+    "get_adapter",
 ]
