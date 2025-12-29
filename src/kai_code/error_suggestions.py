@@ -912,3 +912,326 @@ def make_missing_argument_error(
         recovery_commands=recovery_commands,
         context=context,
     )
+
+
+# =============================================================================
+# Configuration Error Builder Functions
+# =============================================================================
+
+# Provider-specific API key setup instructions
+PROVIDER_API_KEY_INSTRUCTIONS: dict[str, dict[str, str]] = {
+    "anthropic": {
+        "env_var": "ANTHROPIC_API_KEY",
+        "url": "https://console.anthropic.com/settings/keys",
+        "description": "Anthropic (Claude)",
+    },
+    "openai": {
+        "env_var": "OPENAI_API_KEY",
+        "url": "https://platform.openai.com/api-keys",
+        "description": "OpenAI (GPT)",
+    },
+    "google": {
+        "env_var": "GOOGLE_API_KEY",
+        "url": "https://aistudio.google.com/app/apikey",
+        "description": "Google (Gemini)",
+    },
+    "gemini": {
+        "env_var": "GOOGLE_API_KEY",
+        "url": "https://aistudio.google.com/app/apikey",
+        "description": "Google (Gemini)",
+    },
+    "mistral": {
+        "env_var": "MISTRAL_API_KEY",
+        "url": "https://console.mistral.ai/api-keys/",
+        "description": "Mistral AI",
+    },
+    "groq": {
+        "env_var": "GROQ_API_KEY",
+        "url": "https://console.groq.com/keys",
+        "description": "Groq",
+    },
+    "ollama": {
+        "env_var": "",  # Ollama doesn't require API key by default
+        "url": "https://ollama.ai/",
+        "description": "Ollama (local)",
+    },
+}
+
+
+def make_api_key_missing_error(
+    provider: str,
+) -> ActionableError:
+    """Create an ActionableError for a missing API key error.
+
+    This function builds an error message with provider-specific instructions
+    for obtaining and setting up an API key.
+
+    Args:
+        provider: The name of the AI provider (e.g., "anthropic", "openai", "google").
+
+    Returns:
+        An ActionableError with setup instructions and recovery commands.
+
+    Example:
+        >>> error = make_api_key_missing_error("anthropic")
+        >>> error.error_type
+        <ErrorType.API_KEY_MISSING: 'api_key_missing'>
+        >>> "ANTHROPIC_API_KEY" in str(error.suggestions)
+        True
+    """
+    provider_lower = provider.lower().strip()
+
+    # Get provider-specific info
+    provider_info = PROVIDER_API_KEY_INSTRUCTIONS.get(provider_lower)
+
+    if provider_info:
+        env_var = provider_info["env_var"]
+        url = provider_info["url"]
+        description = provider_info["description"]
+    else:
+        # Generic fallback for unknown providers
+        env_var = f"{provider.upper().replace(' ', '_').replace('-', '_')}_API_KEY"
+        url = ""
+        description = provider
+
+    # Special case for Ollama which doesn't need an API key
+    if provider_lower == "ollama":
+        message = f"Ollama is not running or not accessible"
+        suggestions = [
+            "Make sure Ollama is installed and running",
+            "Check if Ollama is running with 'ollama list'",
+            "Start Ollama with 'ollama serve' if not running",
+        ]
+        recovery_commands = [
+            "ollama list",
+            "ollama serve",
+        ]
+        context = {
+            "provider": description,
+        }
+        return ActionableError(
+            error_type=ErrorType.API_KEY_MISSING,
+            message=message,
+            suggestions=suggestions,
+            recovery_commands=recovery_commands,
+            context=context,
+        )
+
+    # Build the main message
+    message = f"API key not configured for {description}"
+
+    # Build suggestions
+    suggestions = [
+        f"Set the {env_var} environment variable with your API key",
+    ]
+
+    if url:
+        suggestions.append(f"Get your API key from: {url}")
+
+    suggestions.extend([
+        f"Add 'export {env_var}=your-key-here' to your shell profile",
+        "Or create a .env file in your project directory",
+    ])
+
+    # Build recovery commands
+    recovery_commands = [
+        f"# Set the API key in your current session:",
+        f"export {env_var}=your-api-key-here",
+    ]
+
+    if url:
+        recovery_commands.extend([
+            f"# Get your API key from:",
+            f"# {url}",
+        ])
+
+    recovery_commands.extend([
+        f"# Or add to ~/.bashrc or ~/.zshrc:",
+        f"echo 'export {env_var}=your-api-key-here' >> ~/.bashrc",
+    ])
+
+    # Build context
+    context = {
+        "provider": description,
+        "env_var": env_var,
+    }
+    if url:
+        context["api_key_url"] = url
+
+    return ActionableError(
+        error_type=ErrorType.API_KEY_MISSING,
+        message=message,
+        suggestions=suggestions,
+        recovery_commands=recovery_commands,
+        context=context,
+    )
+
+
+def make_model_not_available_error(
+    model: str,
+    available_models: Sequence[str],
+    n: int = DEFAULT_MAX_SUGGESTIONS,
+    cutoff: float = DEFAULT_SIMILARITY_THRESHOLD,
+) -> ActionableError:
+    """Create an ActionableError for a model not available error.
+
+    This function builds an error message with similar model suggestions
+    based on fuzzy matching against available models.
+
+    Args:
+        model: The model name that was requested but not available.
+        available_models: List of available model names to search through.
+        n: Maximum number of similar models to suggest. Defaults to 3.
+        cutoff: Similarity threshold (0.0 to 1.0). Defaults to 0.6.
+
+    Returns:
+        An ActionableError with suggestions for similar models and
+        a list of available models.
+
+    Example:
+        >>> error = make_model_not_available_error("gpt-4o-mni", ["gpt-4o-mini", "gpt-4o", "gpt-4"])
+        >>> error.error_type
+        <ErrorType.MODEL_NOT_AVAILABLE: 'model_not_available'>
+        >>> "gpt-4o-mini" in error.related_items
+        True
+    """
+    model_str = model.strip()
+
+    # Find similar models
+    similar = suggest_values(model_str, available_models, n=n, cutoff=cutoff)
+
+    # Build the main message
+    message = f"Model '{model_str}' is not available"
+
+    # Build suggestions
+    suggestions = [
+        "Check if the model name is spelled correctly",
+    ]
+
+    # Mention if it looks like a typo of an available model
+    if similar:
+        if len(similar) == 1:
+            suggestions.insert(0, f"Did you mean '{similar[0]}'?")
+        else:
+            suggestions.insert(0, f"Similar models: {', '.join(similar)}")
+
+    # If few available models, list them all
+    if len(available_models) <= 10 and available_models:
+        formatted_models = ", ".join(sorted(available_models))
+        suggestions.append(f"Available models: {formatted_models}")
+    elif available_models:
+        suggestions.append(f"Use '/models' to see all {len(available_models)} available models")
+    else:
+        suggestions.append("No models are currently available - check your API key configuration")
+
+    suggestions.append("Some models may require specific API keys or permissions")
+
+    # Build recovery commands
+    recovery_commands = [
+        "/models",
+    ]
+
+    # If we have a similar model, suggest using it
+    if similar:
+        recovery_commands.insert(0, f"/model {similar[0]}")
+
+    # Build context
+    context = {
+        "requested_model": model_str,
+        "available_count": str(len(available_models)),
+    }
+
+    return ActionableError(
+        error_type=ErrorType.MODEL_NOT_AVAILABLE,
+        message=message,
+        suggestions=suggestions,
+        recovery_commands=recovery_commands,
+        related_items=similar,
+        context=context,
+    )
+
+
+def make_skill_not_found_error(
+    skill_id: str,
+    available_skills: Sequence[str],
+    n: int = DEFAULT_MAX_SUGGESTIONS,
+    cutoff: float = DEFAULT_SIMILARITY_THRESHOLD,
+) -> ActionableError:
+    """Create an ActionableError for a skill not found error.
+
+    This function builds an error message with similar skill suggestions
+    based on fuzzy matching against available skills.
+
+    Args:
+        skill_id: The skill identifier that was not found.
+        available_skills: List of available skill identifiers to search through.
+        n: Maximum number of similar skills to suggest. Defaults to 3.
+        cutoff: Similarity threshold (0.0 to 1.0). Defaults to 0.6.
+
+    Returns:
+        An ActionableError with suggestions for similar skills and
+        a list of available skills.
+
+    Example:
+        >>> error = make_skill_not_found_error("code-reveiw", ["code-review", "code-explain", "code-refactor"])
+        >>> error.error_type
+        <ErrorType.SKILL_NOT_FOUND: 'skill_not_found'>
+        >>> "code-review" in error.related_items
+        True
+    """
+    skill_str = skill_id.strip()
+
+    # Find similar skills
+    similar = suggest_values(skill_str, available_skills, n=n, cutoff=cutoff)
+
+    # Build the main message
+    message = f"Skill '{skill_str}' not found"
+
+    # Build suggestions
+    suggestions = [
+        "Check if the skill name is spelled correctly",
+    ]
+
+    # Mention if it looks like a typo of an available skill
+    if similar:
+        if len(similar) == 1:
+            suggestions.insert(0, f"Did you mean '{similar[0]}'?")
+        else:
+            suggestions.insert(0, f"Similar skills: {', '.join(similar)}")
+
+    # If few available skills, list them all
+    if len(available_skills) <= 10 and available_skills:
+        formatted_skills = ", ".join(sorted(available_skills))
+        suggestions.append(f"Available skills: {formatted_skills}")
+    elif available_skills:
+        suggestions.append(f"Use '/skills' to see all {len(available_skills)} available skills")
+    else:
+        suggestions.append("No skills are currently loaded")
+
+    suggestions.append("Skills can be loaded from local directories or installed packages")
+
+    # Build recovery commands
+    recovery_commands = [
+        "/skills",
+    ]
+
+    # If we have a similar skill, suggest loading it
+    if similar:
+        recovery_commands.insert(0, f"/skill load {similar[0]}")
+
+    recovery_commands.append("/skill reload")
+
+    # Build context
+    context = {
+        "requested_skill": skill_str,
+        "available_count": str(len(available_skills)),
+    }
+
+    return ActionableError(
+        error_type=ErrorType.SKILL_NOT_FOUND,
+        message=message,
+        suggestions=suggestions,
+        recovery_commands=recovery_commands,
+        related_items=similar,
+        context=context,
+    )
