@@ -80,8 +80,8 @@
           "file_paths": [
             "src/kai_code/memory/manager.py"
           ],
-          "status": "pending",
-          "notes": ""
+          "status": "completed",
+          "notes": "Implemented _update_history_content() method that formats history entries as a readable string. Entries are displayed chronologically with format: [timestamp] Role: summary. Method is called automatically when adding entries via add_history_entry()."
         },
         {
           "subtask_id": "2.5",
@@ -90,8 +90,8 @@
           "file_paths": [
             "src/kai_code/memory/manager.py"
           ],
-          "status": "pending",
-          "notes": ""
+          "status": "completed",
+          "notes": "Implemented clear_history() method that clears entries list and calls _update_history_content() to reset content to '[CURRENTLY EMPTY]'. Includes error handling for missing history block."
         }
       ]
     },
@@ -107,8 +107,8 @@
           "file_paths": [
             "src/kai_code/memory/__init__.py"
           ],
-          "status": "pending",
-          "notes": ""
+          "status": "completed",
+          "notes": "Added ConversationHistoryMemoryBlock and ConversationHistoryEntry to memory/__init__.py exports and __all__ list. Verified syntax is correct."
         }
       ]
     },
