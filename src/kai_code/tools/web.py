@@ -274,6 +274,17 @@ def fetch_url(url: str, timeout: int = 30) -> dict[str, Any]:
     3. Synthesize this into a clear, natural language response
     4. NEVER show the raw markdown to the user unless specifically requested
     """
+    progress_manager = get_progress_manager()
+
+    # Report starting phase - fetching URL
+    progress_manager.report(
+        ToolProgress(
+            tool_name="fetch_url",
+            status_message=f"Fetching {url}...",
+            phase=ProgressPhase.STARTING,
+        )
+    )
+
     try:
         response = requests.get(
             url,
@@ -282,8 +293,26 @@ def fetch_url(url: str, timeout: int = 30) -> dict[str, Any]:
         )
         response.raise_for_status()
 
+        # Report processing phase - converting HTML to markdown
+        progress_manager.report(
+            ToolProgress(
+                tool_name="fetch_url",
+                status_message="Converting HTML to markdown...",
+                phase=ProgressPhase.PROCESSING,
+            )
+        )
+
         # Convert HTML content to markdown
         markdown_content = markdownify(response.text)
+
+        # Report complete phase with content length
+        progress_manager.report(
+            ToolProgress(
+                tool_name="fetch_url",
+                status_message=f"Processed {len(markdown_content)} characters",
+                phase=ProgressPhase.COMPLETE,
+            )
+        )
 
         return {
             "url": str(response.url),
@@ -291,5 +320,33 @@ def fetch_url(url: str, timeout: int = 30) -> dict[str, Any]:
             "status_code": response.status_code,
             "content_length": len(markdown_content),
         }
+    except requests.exceptions.Timeout:
+        # Report timeout error
+        progress_manager.report(
+            ToolProgress(
+                tool_name="fetch_url",
+                status_message=f"Request timed out after {timeout}s",
+                phase=ProgressPhase.COMPLETE,
+            )
+        )
+        return {"error": f"Fetch URL error: Request timed out after {timeout} seconds", "url": url}
+    except requests.exceptions.RequestException as e:
+        # Report request error
+        progress_manager.report(
+            ToolProgress(
+                tool_name="fetch_url",
+                status_message=f"Request error: {type(e).__name__}",
+                phase=ProgressPhase.COMPLETE,
+            )
+        )
+        return {"error": f"Fetch URL error: {e!s}", "url": url}
     except Exception as e:
+        # Report general error
+        progress_manager.report(
+            ToolProgress(
+                tool_name="fetch_url",
+                status_message=f"Error: {type(e).__name__}",
+                phase=ProgressPhase.COMPLETE,
+            )
+        )
         return {"error": f"Fetch URL error: {e!s}", "url": url}
