@@ -404,6 +404,53 @@ def render_todo_list(todos: list[dict]) -> None:
     console.print(panel)
 
 
+def render_quick_start_panel() -> None:
+    """Render the Quick Start panel for first-time users.
+
+    Displays a compact, scannable panel highlighting key features:
+    - @file injection (most valuable feature)
+    - !bash commands
+    - /help command
+    - /model for model selection
+    - /tasks for background tasks
+    - Ctrl+T for auto-approve toggle
+    """
+    # Build feature lines with consistent formatting
+    # Using dim bullets and highlighting the key syntax
+    features = [
+        f"  [{COLORS['tool']}]@file[/{COLORS['tool']}]      "
+        f"[{COLORS['dim']}]Inject file contents into your message[/{COLORS['dim']}]",
+        f"  [{COLORS['tool']}]!command[/{COLORS['tool']}]  "
+        f"[{COLORS['dim']}]Run bash commands (e.g., !ls, !git status)[/{COLORS['dim']}]",
+        f"  [{COLORS['tool']}]/help[/{COLORS['tool']}]     "
+        f"[{COLORS['dim']}]Show all commands and features[/{COLORS['dim']}]",
+        f"  [{COLORS['tool']}]/model[/{COLORS['tool']}]    "
+        f"[{COLORS['dim']}]Switch between AI models[/{COLORS['dim']}]",
+        f"  [{COLORS['tool']}]/tasks[/{COLORS['tool']}]    "
+        f"[{COLORS['dim']}]View background tasks[/{COLORS['dim']}]",
+        f"  [{COLORS['tool']}]Ctrl+T[/{COLORS['tool']}]    "
+        f"[{COLORS['dim']}]Toggle auto-approve mode[/{COLORS['dim']}]",
+    ]
+
+    # Add tip callout for the most valuable feature
+    tip_line = (
+        f"\n  [{COLORS['primary']}]Tip:[/{COLORS['primary']}] "
+        f"[{COLORS['dim']}]Type @ and start typing a filename for auto-complete![/{COLORS['dim']}]"
+    )
+
+    content = "\n".join(features) + tip_line
+
+    panel = Panel(
+        content,
+        title=f"[bold {COLORS['primary']}]Quick Start[/bold {COLORS['primary']}]",
+        border_style=COLORS["primary"],
+        box=box.ROUNDED,
+        padding=(0, 1),
+    )
+    console.print(panel)
+    console.print()
+
+
 def _format_line_span(start: int | None, end: int | None) -> str:
     if start is None and end is None:
         return ""
@@ -731,6 +778,9 @@ def show_help() -> None:
 
     console.print("[bold]Interactive Commands:[/bold]", style=COLORS["primary"])
     console.print("  /help           Show available commands and features", style=COLORS["dim"])
+    console.print("  /quickstart     Show Quick Start panel with key features", style=COLORS["dim"])
+    console.print("  /model          Select or switch AI model", style=COLORS["dim"])
+    console.print("  /tasks          Show background tasks panel", style=COLORS["dim"])
     console.print("  /clear          Clear screen and reset conversation", style=COLORS["dim"])
     console.print("  /tokens         Show token usage for current session", style=COLORS["dim"])
     console.print("  /quit, /exit    Exit the session", style=COLORS["dim"])

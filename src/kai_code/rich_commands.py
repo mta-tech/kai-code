@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 from kai_code.rich_config import console, COLORS, rich_settings
-from kai_code.cli_ui import TokenTracker, show_interactive_help
+from kai_code.cli_ui import TokenTracker, show_interactive_help, render_quick_start_panel
 from kai_code.skills import discover_skills_legacy
 from kai_code.errors import ActionableError, ErrorType, render_error
 from kai_code.error_suggestions import (
@@ -64,6 +64,10 @@ def handle_command(
 
     if command == "/skills":
         _show_skills()
+        return None
+
+    if command == "/quickstart":
+        render_quick_start_panel()
         return None
 
     if command == "/brainstorm" or command.startswith("/brainstorm "):

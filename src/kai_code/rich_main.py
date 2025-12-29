@@ -28,7 +28,8 @@ from kai_code.rich_input import (
     ImageTracker,
     create_prompt_session,
 )
-from kai_code.cli_ui import TokenTracker, show_interactive_help
+from kai_code.cli_ui import TokenTracker, show_interactive_help, render_quick_start_panel
+from kai_code.onboarding import is_first_time_user, mark_onboarding_complete
 from kai_code.tasks import get_task_manager
 from kai_code.model_selector import show_model_selector, get_available_models, format_current_model
 from kai_code.model import resolve_model, get_default_model
@@ -142,13 +143,26 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         help="Maximum total tokens to use (default: 500000)",
     )
 
+    parser.add_argument(
+        "--show-quick-start",
+        action="store_true",
+        help="Force showing the Quick Start panel even if onboarding is complete",
+    )
+
     return parser.parse_args(args)
 
 
 def _show_startup_banner(session_state: SessionState) -> None:
-    """Display the startup banner and status information."""
+    """Display the startup banner and status information.
+
+    For first-time users, also displays the Quick Start panel to highlight
+    key features and shortcuts.
+    """
     if session_state.no_splash:
         return
+
+    # Check if this is a first-time user before showing anything
+    first_time = is_first_time_user()
 
     # Display ASCII art banner
     console.print(KAI_CODE_ASCII, style=COLORS["primary"])
@@ -175,8 +189,20 @@ def _show_startup_banner(session_state: SessionState) -> None:
         console.print("Web search: Tavily enabled", style="dim")
 
     console.print()
-    console.print("Type /help for commands, Ctrl+C twice to exit.", style="dim")
-    console.print()
+
+    # Show Quick Start panel for first-time users or if forced via CLI flag
+    if first_time or session_state.show_quick_start:
+        render_quick_start_panel()
+        # Mark onboarding complete so panel won't show again automatically
+        if first_time:
+            mark_onboarding_complete()
+    else:
+        # Show helpful quick reference for returning users
+        console.print(
+            "Type /help for commands, @file to inject files, Ctrl+C twice to exit.",
+            style="dim"
+        )
+        console.print()
 
 
 def _get_model_string(model_id: str | None = None) -> str:
@@ -557,6 +583,7 @@ def main(args: list[str] | None = None) -> int:
         auto_approve=parsed.auto_approve,
         no_splash=parsed.no_splash,
         model=parsed.model,
+        show_quick_start=parsed.show_quick_start,
     )
 
     # Get initial prompt from positional arguments
