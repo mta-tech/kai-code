@@ -1,0 +1,77 @@
+# Build Progress: Real-Time Token Usage Indicator in Status Area
+
+## Status: Planning Complete
+
+## Summary
+Implementation plan created for adding a real-time token usage indicator to the CLI status area, with visual warnings when approaching context limits.
+
+## Key Discoveries
+1. **TokenTracker class** (cli_ui.py): Already tracks baseline_context, current_context, last_output. Currently only displays via /tokens command.
+2. **RichStatusBar** (rich_ui/components/status_bar.py): Displays model, session, YOLO mode in a Panel. Will be extended to include token indicator.
+3. **ModelInfo** (model.py): Lacks context_window field - needs to be added along with models.json updates.
+4. **rich_execution.py**: Token tracking happens in execute_task() but only stores, doesn't display real-time.
+
+## Implementation Plan Overview
+
+### Phase 1: Foundation - Model Context Limits
+- Add context_window to models.json (Claude 200K, GPT-4o 128K, Gemini 1M+)
+- Extend ModelInfo dataclass
+- Add get_context_limit() helper
+
+### Phase 2: Enhanced TokenTracker
+- Add context_limit, warning/critical thresholds (80%/95%)
+- Add usage percentage and status level methods
+- Add format_compact_display() for status bar
+- Add threshold crossing tracking
+
+### Phase 3: Token Usage Indicator Component
+- Create TokenUsageIndicator class (rich_ui/components/token_indicator.py)
+- Color coding: green (<80%), yellow (80-95%), red (>95%)
+- Integrate into RichStatusBar
+
+### Phase 4: Real-Time Display Integration
+- Add prompt-toolkit bottom_toolbar support
+- Update create_prompt_session with token tracker
+- Set context limit on model selection
+- Show token update after each turn
+
+### Phase 5: Configuration
+- Add show_tokens setting to SessionState
+- Add --show-tokens/--no-tokens CLI flags
+- Extend /tokens command with toggle
+
+### Phase 6: Context Limit Warnings
+- Add warning colors to COLORS dict
+- Implement threshold crossing notifications
+- Add /clear suggestion at critical threshold
+
+### Phase 7: Testing
+- Unit tests for TokenTracker enhancements
+- Unit tests for TokenUsageIndicator component
+- Tests for model context limits
+
+### Phase 8: Documentation
+- Update COMMANDS dict help text
+- Update show_interactive_help
+
+## Files to Modify
+- src/kai_code/models.json
+- src/kai_code/model.py
+- src/kai_code/cli_ui.py
+- src/kai_code/rich_config.py
+- src/kai_code/rich_main.py
+- src/kai_code/rich_execution.py
+- src/kai_code/rich_commands.py
+- src/kai_code/rich_input.py
+- src/kai_code/rich_ui/components/status_bar.py
+
+## New Files
+- src/kai_code/rich_ui/components/token_indicator.py
+- tests/test_token_tracker.py
+- tests/test_token_indicator.py
+
+## Next Steps
+Begin Phase 1 implementation - add context limits to model definitions.
+
+---
+Last Updated: 2025-12-29

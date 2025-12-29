@@ -1,0 +1,292 @@
+{
+  "feature": "Real-Time Token Usage Indicator in Status Area",
+  "description": "Add an optional token counter to the bottom toolbar or status area that shows context size growing in real-time, with visual warnings when approaching context limits.",
+  "created_at": "2025-12-29T15:43:18.664Z",
+  "updated_at": "2025-12-29T22:50:00.000Z",
+  "status": "in_progress",
+  "planStatus": "ready",
+  "workflow_type": "development",
+  "spec_file": "spec.md",
+  "estimated_effort": "Medium",
+  "architecture_notes": "The implementation follows the existing Rich UI pattern. TokenTracker is enhanced with limit awareness, and a new TokenUsageIndicator component provides visual display. The indicator integrates with the existing status bar infrastructure and updates after each agent turn via the execute_task flow.",
+  "key_files": [
+    "src/kai_code/cli_ui.py",
+    "src/kai_code/model.py",
+    "src/kai_code/models.json",
+    "src/kai_code/rich_config.py",
+    "src/kai_code/rich_main.py",
+    "src/kai_code/rich_execution.py",
+    "src/kai_code/rich_commands.py",
+    "src/kai_code/rich_ui/components/status_bar.py",
+    "src/kai_code/rich_ui/components/token_indicator.py"
+  ],
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Foundation - Model Context Limits",
+      "description": "Add context limit metadata to model definitions and enhance ModelInfo",
+      "subtasks": [
+        {
+          "id": "1.1",
+          "title": "Update models.json with context limits",
+          "description": "Add context_window field to each model in models.json with appropriate token limits: Claude models 200K, GPT-4o 128K, GPT-4o-mini 128K, o1/o3 200K, Gemini 1M+",
+          "status": "pending",
+          "files": ["src/kai_code/models.json"],
+          "notes": ""
+        },
+        {
+          "id": "1.2",
+          "title": "Extend ModelInfo dataclass with context_window",
+          "description": "Add context_window: int | None field to ModelInfo dataclass and update _load_models_json() to parse it. Default to 128K when unknown.",
+          "status": "pending",
+          "files": ["src/kai_code/model.py"],
+          "notes": ""
+        },
+        {
+          "id": "1.3",
+          "title": "Add get_context_limit helper function",
+          "description": "Create get_context_limit(model_identifier: str) -> int function to retrieve context limit for a model, with 128K default when unknown",
+          "status": "pending",
+          "files": ["src/kai_code/model.py"],
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "id": "phase-2",
+      "name": "Enhanced TokenTracker",
+      "description": "Extend TokenTracker class with limit awareness, warning thresholds, and real-time display methods",
+      "subtasks": [
+        {
+          "id": "2.1",
+          "title": "Add context limit and threshold properties to TokenTracker",
+          "description": "Add context_limit: int | None property, WARNING_THRESHOLD = 0.80, CRITICAL_THRESHOLD = 0.95 constants. Add set_context_limit(limit: int) method.",
+          "status": "pending",
+          "files": ["src/kai_code/cli_ui.py"],
+          "notes": ""
+        },
+        {
+          "id": "2.2",
+          "title": "Add usage percentage and status calculation methods",
+          "description": "Add get_usage_percentage() -> float | None and get_status_level() -> Literal['normal', 'warning', 'critical', 'unknown'] methods",
+          "status": "pending",
+          "files": ["src/kai_code/cli_ui.py"],
+          "notes": ""
+        },
+        {
+          "id": "2.3",
+          "title": "Add format_compact_display method",
+          "description": "Create format_compact_display() -> str method returning formatted string like '45K/200K [23%]' or '180K/200K ⚠️ 90%'",
+          "status": "pending",
+          "files": ["src/kai_code/cli_ui.py"],
+          "notes": ""
+        },
+        {
+          "id": "2.4",
+          "title": "Add warning threshold tracking",
+          "description": "Add _warned_80: bool and _warned_95: bool flags to track if warnings have been shown in current session. Add should_show_warning() method.",
+          "status": "pending",
+          "files": ["src/kai_code/cli_ui.py"],
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "id": "phase-3",
+      "name": "Token Usage Indicator Component",
+      "description": "Create a new Rich UI component for displaying token usage in the status area",
+      "subtasks": [
+        {
+          "id": "3.1",
+          "title": "Create TokenUsageIndicator class",
+          "description": "Create new component in rich_ui/components/token_indicator.py with TokenUsageIndicator class that takes a TokenTracker and has render() -> Text method",
+          "status": "pending",
+          "files": ["src/kai_code/rich_ui/components/token_indicator.py"],
+          "notes": "Use color coding: green for normal (<80%), yellow for warning (80-95%), red for critical (>95%)"
+        },
+        {
+          "id": "3.2",
+          "title": "Export TokenUsageIndicator from components",
+          "description": "Update rich_ui/components/__init__.py to export TokenUsageIndicator",
+          "status": "pending",
+          "files": ["src/kai_code/rich_ui/components/__init__.py"],
+          "notes": ""
+        },
+        {
+          "id": "3.3",
+          "title": "Integrate indicator into RichStatusBar",
+          "description": "Update RichStatusBar to accept optional TokenTracker and display token usage with color-coded warnings",
+          "status": "pending",
+          "files": ["src/kai_code/rich_ui/components/status_bar.py"],
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "id": "phase-4",
+      "name": "Real-Time Display Integration",
+      "description": "Integrate the token indicator into the main execution flow for real-time updates",
+      "subtasks": [
+        {
+          "id": "4.1",
+          "title": "Add prompt-toolkit bottom toolbar support",
+          "description": "Create get_bottom_toolbar() function that returns formatted token usage for display in prompt-toolkit's bottom_toolbar",
+          "status": "pending",
+          "files": ["src/kai_code/rich_input.py"],
+          "notes": "prompt-toolkit supports bottom_toolbar parameter in prompt() for status display"
+        },
+        {
+          "id": "4.2",
+          "title": "Update create_prompt_session with token tracker",
+          "description": "Pass token_tracker to create_prompt_session and configure bottom_toolbar callback to display real-time token usage",
+          "status": "pending",
+          "files": ["src/kai_code/rich_input.py", "src/kai_code/rich_main.py"],
+          "notes": ""
+        },
+        {
+          "id": "4.3",
+          "title": "Update simple_cli to set context limit on model selection",
+          "description": "When model is selected/changed, fetch context limit via get_context_limit() and call token_tracker.set_context_limit()",
+          "status": "pending",
+          "files": ["src/kai_code/rich_main.py"],
+          "notes": ""
+        },
+        {
+          "id": "4.4",
+          "title": "Show token update after each turn",
+          "description": "After token_tracker.add() in execute_task, optionally print a brief token status update if enabled",
+          "status": "pending",
+          "files": ["src/kai_code/rich_execution.py"],
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "id": "phase-5",
+      "name": "Configuration and User Preferences",
+      "description": "Add configuration options to enable/disable and customize the token indicator",
+      "subtasks": [
+        {
+          "id": "5.1",
+          "title": "Add show_tokens setting to SessionState",
+          "description": "Add show_tokens: bool field to SessionState, default True. Support KAI_SHOW_TOKENS environment variable override.",
+          "status": "pending",
+          "files": ["src/kai_code/rich_config.py"],
+          "notes": ""
+        },
+        {
+          "id": "5.2",
+          "title": "Add CLI flag for token indicator",
+          "description": "Add --show-tokens/--no-tokens CLI flags to control whether token indicator is displayed",
+          "status": "pending",
+          "files": ["src/kai_code/rich_main.py"],
+          "notes": ""
+        },
+        {
+          "id": "5.3",
+          "title": "Extend /tokens command with toggle",
+          "description": "Update handle_command to support '/tokens show', '/tokens hide', and '/tokens' (toggle/display current). Update COMMANDS dict.",
+          "status": "pending",
+          "files": ["src/kai_code/rich_commands.py", "src/kai_code/rich_config.py"],
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "id": "phase-6",
+      "name": "Context Limit Warnings",
+      "description": "Implement visual warnings and notifications when approaching context limits",
+      "subtasks": [
+        {
+          "id": "6.1",
+          "title": "Add warning color constants to COLORS",
+          "description": "Add token_normal (#10b981 green), token_warning (#fbbf24 yellow), token_critical (#ef4444 red) to COLORS dict",
+          "status": "pending",
+          "files": ["src/kai_code/rich_config.py"],
+          "notes": ""
+        },
+        {
+          "id": "6.2",
+          "title": "Implement threshold crossing notifications",
+          "description": "In execute_task, after token_tracker.add(), check if threshold was crossed and show one-time warning message",
+          "status": "pending",
+          "files": ["src/kai_code/rich_execution.py"],
+          "notes": "Show: '⚠️ Context at 80% - consider using /clear soon' and '🚨 Context at 95% - recommend using /clear now'"
+        },
+        {
+          "id": "6.3",
+          "title": "Add /clear suggestion at critical threshold",
+          "description": "When above 95%, append a dim hint about /clear after each response",
+          "status": "pending",
+          "files": ["src/kai_code/rich_execution.py"],
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "id": "phase-7",
+      "name": "Testing",
+      "description": "Write comprehensive tests for the new token indicator functionality",
+      "subtasks": [
+        {
+          "id": "7.1",
+          "title": "Add unit tests for enhanced TokenTracker",
+          "description": "Test: set_context_limit, get_usage_percentage, get_status_level, format_compact_display, should_show_warning, reset clears warnings",
+          "status": "pending",
+          "files": ["tests/test_token_tracker.py"],
+          "notes": ""
+        },
+        {
+          "id": "7.2",
+          "title": "Add unit tests for TokenUsageIndicator component",
+          "description": "Test render() at different usage levels (0%, 50%, 80%, 95%, 100%), verify correct colors",
+          "status": "pending",
+          "files": ["tests/test_token_indicator.py"],
+          "notes": ""
+        },
+        {
+          "id": "7.3",
+          "title": "Add tests for model context limits",
+          "description": "Test get_context_limit for known models, unknown models, and default fallback",
+          "status": "pending",
+          "files": ["tests/test_models_loader.py"],
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "id": "phase-8",
+      "name": "Documentation",
+      "description": "Update documentation to reflect new token indicator feature",
+      "subtasks": [
+        {
+          "id": "8.1",
+          "title": "Update COMMANDS dict help text",
+          "description": "Update tokens command description to mention show/hide toggle functionality",
+          "status": "pending",
+          "files": ["src/kai_code/rich_config.py"],
+          "notes": ""
+        },
+        {
+          "id": "8.2",
+          "title": "Update show_interactive_help with token info",
+          "description": "Add section about token indicator in the interactive help output, explain status bar display and threshold warnings",
+          "status": "pending",
+          "files": ["src/kai_code/cli_ui.py"],
+          "notes": ""
+        }
+      ]
+    }
+  ],
+  "services_involved": [],
+  "final_acceptance": [
+    "Token usage indicator displays in status area/bottom toolbar during interactive sessions",
+    "Indicator updates in real-time after each agent response",
+    "Color coding: green (<80%), yellow (80-95%), red (>95%)",
+    "One-time warning notifications when crossing 80% and 95% thresholds",
+    "/tokens command shows detailed usage and supports show/hide toggle",
+    "--show-tokens/--no-tokens CLI flags work correctly",
+    "Context limits are correctly loaded from models.json for all supported models",
+    "All unit tests pass"
+  ]
+}

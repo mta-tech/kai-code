@@ -1,0 +1,20 @@
+{
+  "discovered_files": {
+    "src/kai_code/cli_ui.py": {
+      "description": "TokenTracker class exists with baseline_context, current_context, last_output tracking. Has set_baseline(), reset(), add(), display_last(), display_session() methods. Currently only displays on-demand via /tokens command.",
+      "category": "architecture",
+      "discovered_at": "2025-12-29T15:51:07.631084+00:00"
+    },
+    "src/kai_code/rich_ui/components/status_bar.py": {
+      "description": "RichStatusBar component displays model, session, and YOLO mode in a Panel. Has render() method and update methods. This is where the token indicator will be integrated.",
+      "category": "architecture",
+      "discovered_at": "2025-12-29T15:51:07.732875+00:00"
+    },
+    "src/kai_code/model.py": {
+      "description": "ModelInfo dataclass with id, handle, provider, is_default, update_args fields. Does NOT have context_window field - needs to be added. models.json also lacks context limits.",
+      "category": "architecture",
+      "discovered_at": "2025-12-29T15:51:07.968532+00:00"
+    }
+  },
+  "last_updated": "2025-12-29T15:51:07.968542+00:00"
+}
