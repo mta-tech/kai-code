@@ -643,6 +643,9 @@ def show_help() -> None:
 
     console.print("[bold]Interactive Commands:[/bold]", style=COLORS["primary"])
     console.print("  /help           Show available commands and features", style=COLORS["dim"])
+    console.print("  /quickstart     Show Quick Start panel with key features", style=COLORS["dim"])
+    console.print("  /model          Select or switch AI model", style=COLORS["dim"])
+    console.print("  /tasks          Show background tasks panel", style=COLORS["dim"])
     console.print("  /clear          Clear screen and reset conversation", style=COLORS["dim"])
     console.print("  /tokens         Show token usage for current session", style=COLORS["dim"])
     console.print("  /quit, /exit    Exit the session", style=COLORS["dim"])
