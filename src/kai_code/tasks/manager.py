@@ -169,12 +169,18 @@ class TaskManager:
         if model is not None:
             self._model = model
 
-    def run_shell(self, command: str, working_dir: Path | None = None) -> str:
+    def run_shell(
+        self,
+        command: str,
+        working_dir: Path | None = None,
+        priority: TaskPriority = TaskPriority.NORMAL,
+    ) -> str:
         """Run a shell command in the background.
 
         Args:
             command: Shell command to execute
             working_dir: Working directory (defaults to root_dir)
+            priority: Task priority level (defaults to NORMAL)
 
         Returns:
             Task ID
@@ -182,16 +188,24 @@ class TaskManager:
         task = BackgroundShellTask(
             command=command,
             working_dir=working_dir or self._root_dir,
+            priority=priority,
         )
         return self._submit_task(task)
 
-    def run_agent(self, prompt: str, root_dir: Path | None = None, model: str | None = None) -> str:
+    def run_agent(
+        self,
+        prompt: str,
+        root_dir: Path | None = None,
+        model: str | None = None,
+        priority: TaskPriority = TaskPriority.NORMAL,
+    ) -> str:
         """Run an agent prompt in the background.
 
         Args:
             prompt: Prompt to send to the agent
             root_dir: Root directory for the agent
             model: Model to use
+            priority: Task priority level (defaults to NORMAL)
 
         Returns:
             Task ID
@@ -200,6 +214,7 @@ class TaskManager:
             prompt=prompt,
             root_dir=root_dir or self._root_dir,
             model=model or self._model,
+            priority=priority,
         )
         return self._submit_task(task)
 
