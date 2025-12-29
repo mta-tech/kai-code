@@ -1,6 +1,7 @@
 """Task manager for background execution."""
 from __future__ import annotations
 
+import heapq
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -9,9 +10,129 @@ from typing import Callable
 from .task import (
     Task,
     TaskStatus,
+    TaskPriority,
     BackgroundShellTask,
     BackgroundAgentTask,
 )
+
+
+class PriorityTaskQueue:
+    """Thread-safe priority queue for tasks.
+
+    Uses a heap-based priority queue with tuples of:
+    (priority_value, creation_time, task_id, task)
+
+    This ensures:
+    - Tasks with lower priority values (higher priority) are dequeued first
+    - Tasks with same priority are ordered by creation time (FIFO)
+    - task_id provides a tiebreaker for identical timestamps
+    """
+
+    def __init__(self) -> None:
+        self._heap: list[tuple[int, float, str, Task]] = []
+        self._lock = threading.Lock()
+
+    def push(self, task: Task) -> None:
+        """Add a task to the queue.
+
+        Args:
+            task: The task to add. Uses task.priority and task.created_at for ordering.
+        """
+        with self._lock:
+            # Create heap entry: (priority_value, timestamp, task_id, task)
+            # Lower priority value = higher priority (dequeued first)
+            # Earlier timestamp = higher priority for same priority level
+            entry = (
+                task.priority.value,
+                task.created_at.timestamp(),
+                task.id,
+                task,
+            )
+            heapq.heappush(self._heap, entry)
+
+    def pop(self) -> Task | None:
+        """Remove and return the highest-priority task.
+
+        Returns:
+            The highest-priority task, or None if the queue is empty.
+        """
+        with self._lock:
+            if not self._heap:
+                return None
+            _, _, _, task = heapq.heappop(self._heap)
+            return task
+
+    def peek(self) -> Task | None:
+        """Return the highest-priority task without removing it.
+
+        Returns:
+            The highest-priority task, or None if the queue is empty.
+        """
+        with self._lock:
+            if not self._heap:
+                return None
+            _, _, _, task = self._heap[0]
+            return task
+
+    def remove(self, task_id: str) -> Task | None:
+        """Remove a specific task from the queue by ID.
+
+        Args:
+            task_id: The ID of the task to remove.
+
+        Returns:
+            The removed task, or None if not found.
+        """
+        with self._lock:
+            for i, (_, _, tid, task) in enumerate(self._heap):
+                if tid == task_id:
+                    # Remove the item and re-heapify
+                    removed_task = task
+                    self._heap.pop(i)
+                    heapq.heapify(self._heap)
+                    return removed_task
+            return None
+
+    def clear(self) -> list[Task]:
+        """Remove and return all tasks from the queue.
+
+        Returns:
+            List of all tasks that were in the queue.
+        """
+        with self._lock:
+            tasks = [task for _, _, _, task in self._heap]
+            self._heap.clear()
+            return tasks
+
+    def get_all(self) -> list[Task]:
+        """Get all tasks in the queue without removing them.
+
+        Returns:
+            List of all tasks, sorted by priority (highest first).
+        """
+        with self._lock:
+            # Return tasks sorted by their priority order
+            sorted_entries = sorted(self._heap)
+            return [task for _, _, _, task in sorted_entries]
+
+    def __len__(self) -> int:
+        """Return the number of tasks in the queue."""
+        with self._lock:
+            return len(self._heap)
+
+    def __bool__(self) -> bool:
+        """Return True if the queue is not empty."""
+        with self._lock:
+            return bool(self._heap)
+
+    def is_empty(self) -> bool:
+        """Check if the queue is empty.
+
+        Returns:
+            True if the queue is empty, False otherwise.
+        """
+        with self._lock:
+            return len(self._heap) == 0
 
 
 class TaskManager:
