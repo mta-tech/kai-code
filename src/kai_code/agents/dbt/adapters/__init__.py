@@ -10,6 +10,7 @@ from kai_code.agents.dbt.adapters.postgresql import (
     PostgreSQLAdapter,
     parse_connection_string,
 )
+from kai_code.agents.dbt.adapters.sqlite import SQLiteAdapter
 
 if TYPE_CHECKING:
     pass
@@ -22,6 +23,7 @@ def get_adapter(connection_string: str) -> DatabaseAdapter:
         connection_string: Database connection string or path.
             Supports:
             - DuckDB: "path/to/file.duckdb" or "duckdb:///path/to/file.duckdb"
+            - SQLite: "path/to/file.sqlite", "path/to/file.sqlite3", or "sqlite:///path/to/file"
             - PostgreSQL: "postgresql://user:pass@host:port/database"
 
     Returns:
@@ -42,13 +44,25 @@ def get_adapter(connection_string: str) -> DatabaseAdapter:
             path = path[1:]  # Remove leading slash for absolute paths
         return DuckDBAdapter(path)
 
+    # Check for SQLite file path (ends with .sqlite or .sqlite3)
+    if connection_string.endswith((".sqlite", ".sqlite3")):
+        return SQLiteAdapter(connection_string)
+
+    # Check for SQLite URI
+    if connection_string.startswith("sqlite://"):
+        # Extract path from URI (sqlite:///path/to/file)
+        path = connection_string.replace("sqlite://", "")
+        if path.startswith("/"):
+            path = path[1:]  # Remove leading slash for absolute paths
+        return SQLiteAdapter(path)
+
     # Check for PostgreSQL URI
     if connection_string.startswith(("postgresql://", "postgres://")):
         return PostgreSQLAdapter(connection_string)
 
     raise ValueError(
         f"Unsupported database connection string: {connection_string}. "
-        "Supported formats: *.duckdb, duckdb://, postgresql://"
+        "Supported formats: *.duckdb, duckdb://, *.sqlite, *.sqlite3, sqlite://, postgresql://"
     )
 
 
@@ -56,6 +70,7 @@ __all__ = [
     "DatabaseAdapter",
     "DuckDBAdapter",
     "PostgreSQLAdapter",
+    "SQLiteAdapter",
     "get_adapter",
     "parse_connection_string",
 ]
