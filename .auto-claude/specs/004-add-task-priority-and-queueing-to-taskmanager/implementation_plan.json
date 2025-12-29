@@ -74,8 +74,9 @@
           "files": [
             "src/kai_code/tasks/manager.py"
           ],
-          "status": "pending",
-          "notes": ""
+          "status": "completed",
+          "notes": "Implemented PriorityTaskQueue class in manager.py with thread-safe operations using heapq and threading.Lock. Queue entries are tuples of (priority_value, creation_time, task_id, task) ensuring stable ordering - high priority first, FIFO for same priority. Methods: push(), pop(), peek(), remove(), clear(), get_all(), is_empty(), __len__(), __bool__(). Committed in 2001f0d.",
+          "updated_at": "2025-12-29T16:20:15.416099+00:00"
         },
         {
           "id": "2.2",
@@ -84,8 +85,9 @@
           "files": [
             "src/kai_code/tasks/manager.py"
           ],
-          "status": "pending",
-          "notes": ""
+          "status": "completed",
+          "notes": "Added _pending_queue (PriorityTaskQueue), _available_slots() method to check running task count vs MAX_CONCURRENT_TASKS, and _process_queue() method to dequeue and start highest-priority tasks when slots are available. Committed in eecef89.",
+          "updated_at": "2025-12-29T16:29:40.185123+00:00"
         },
         {
           "id": "2.3",
@@ -94,8 +96,9 @@
           "files": [
             "src/kai_code/tasks/manager.py"
           ],
-          "status": "pending",
-          "notes": ""
+          "status": "completed",
+          "notes": "Modified _submit_task to: 1) Set task status to QUEUED, 2) Add task to _pending_queue via push(), 3) Call _process_queue() to start tasks if slots available. Tasks now flow through the priority queue system before being started. Committed in 91c6760.",
+          "updated_at": "2025-12-29T16:40:17.393583+00:00"
         },
         {
           "id": "2.4",
@@ -259,5 +262,5 @@
     "tests_passed": "",
     "issues": ""
   },
-  "last_updated": "2025-12-29T16:09:42.031085+00:00"
+  "last_updated": "2025-12-29T16:40:17.393898+00:00"
 }

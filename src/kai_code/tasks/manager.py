@@ -265,12 +265,20 @@ class TaskManager:
             task._thread.start()
 
     def _notify_completion(self, task: Task) -> None:
-        """Notify callbacks when a task completes."""
+        """Notify callbacks when a task completes and process the queue.
+
+        When a task completes, we notify all registered callbacks and then
+        process the pending queue to start the next highest-priority queued
+        task if slots are available.
+        """
         for callback in self._callbacks:
             try:
                 callback(task)
             except Exception:
                 pass
+
+        # Process queue to start next queued task if slots are available
+        self._process_queue()
 
     def on_task_complete(self, callback: Callable[[Task], None]) -> None:
         """Register a callback for task completion."""

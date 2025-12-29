@@ -6,10 +6,15 @@
       "discovered_at": "2025-12-29T15:50:19.316687+00:00"
     },
     "src/kai_code/tasks/task.py": {
-      "description": "TaskStatus.QUEUED added for tasks waiting in priority queue. display_status returns \"\u23f3 queued\" for this status.",
-      "category": "enum",
-      "discovered_at": "2025-12-29T15:58:22.138921+00:00"
+      "description": "Python dataclass inheritance automatically propagates parent fields to child classes. BackgroundShellTask and BackgroundAgentTask inherit priority field from Task without needing explicit redefinition.",
+      "category": "pattern",
+      "discovered_at": "2025-12-29T16:09:54.451261+00:00"
+    },
+    "src/kai_code/tasks/manager.py": {
+      "description": "TaskManager now has _pending_queue (PriorityTaskQueue), _available_slots() returns MAX_CONCURRENT_TASKS - running count, and _process_queue() dequeues highest-priority tasks and starts them when slots available. Queue processing uses closure with default arg (t: Task = task) to capture task reference correctly in loop.",
+      "category": "implementation",
+      "discovered_at": "2025-12-29T16:29:52.244240+00:00"
     }
   },
-  "last_updated": "2025-12-29T15:58:22.138942+00:00"
+  "last_updated": "2025-12-29T16:29:52.244253+00:00"
 }
