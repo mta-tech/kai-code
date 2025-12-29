@@ -16,6 +16,12 @@ from rich.spinner import Spinner
 from rich.status import Status
 
 from ..message_formatter import MessageFormatter
+from kai_code.errors import ActionableError, ErrorType, render_error
+from kai_code.error_suggestions import (
+    make_unknown_command_error,
+    make_missing_argument_error,
+    make_skill_not_found_error,
+)
 
 logger = logging.getLogger("kai_code.rich_ui")
 
@@ -127,17 +133,34 @@ class RichInputHandler:
     def execute_command(self, command: str, args: str, context: Dict[str, Any]) -> bool:
         """Execute a command and return whether to exit."""
         if command not in self.commands:
-            self.console.print(f"[red]Unknown command: {command}[/red]")
-            self._cmd_help("")
+            # Build list of available commands with / prefix
+            available_commands = [f"/{cmd}" for cmd in self.commands.keys()]
+            error = make_unknown_command_error(f"/{command}", available_commands)
+            error.severity = "warning"  # Non-fatal error
+            render_error(error, self.console)
             return False
-        
+
         try:
             # Update context
             command_context = {**context, "args": args, "command": command}
             return self.commands[command](args, command_context)
         except Exception as e:
             logger.error(f"Error executing command {command}: {e}")
-            self.console.print(f"[red]Error: {e}[/red]")
+            error = ActionableError(
+                error_type=ErrorType.COMMAND_EXECUTION_ERROR,
+                message=f"Error executing command '/{command}': {e}",
+                suggestions=[
+                    "Check if the command arguments are valid",
+                    "Verify the agent is properly initialized",
+                    "Try '/help' to see command usage",
+                ],
+                recovery_commands=[
+                    f"/{command} --help" if command not in ("help", "quit", "exit", "clear") else "/help",
+                ],
+                context={"command": f"/{command}", "args": args, "error": str(e)},
+                severity="warning",
+            )
+            render_error(error, self.console)
             return False
     
     def render_thinking_indicator(self, message: str) -> Text:
@@ -174,12 +197,34 @@ class RichInputHandler:
         """Show skills information."""
         agent = context.get("agent")
         if not agent:
-            self.console.print("[red]No agent available[/red]")
+            error = ActionableError(
+                error_type=ErrorType.AGENT_NOT_INITIALIZED,
+                message="No agent available to list skills",
+                suggestions=[
+                    "The agent has not been initialized yet",
+                    "Wait for agent initialization to complete",
+                    "Try starting a new session if this persists",
+                ],
+                recovery_commands=["/help"],
+                severity="warning",
+            )
+            render_error(error, self.console)
             return False
-            
+
         memory_manager = getattr(agent, '_memory_manager', None)
         if not memory_manager:
-            self.console.print("[red]No memory manager available[/red]")
+            error = ActionableError(
+                error_type=ErrorType.SKILL_ERROR,
+                message="No memory manager available for skill operations",
+                suggestions=[
+                    "The agent may not be fully initialized",
+                    "Skills require a memory manager to be configured",
+                    "Check the agent configuration",
+                ],
+                recovery_commands=["/status"],
+                severity="warning",
+            )
+            render_error(error, self.console)
             return False
             
         # Get skills information
@@ -202,14 +247,40 @@ class RichInputHandler:
     def _cmd_load_skill(self, args: str, context: Dict[str, Any]) -> bool:
         """Load a skill."""
         if not args:
-            self.console.print("[red]Usage: /load <skill_id>[/red]")
+            error = make_missing_argument_error(
+                command="/load",
+                missing_arg="skill_id",
+                expected_type="skill identifier (e.g., 'code-review', 'brainstorm')",
+                usage_example="/load code-review",
+            )
+            error.severity = "warning"
+            render_error(error, self.console)
             return False
-            
+
         agent = context.get("agent")
         if not agent:
-            self.console.print("[red]No agent available[/red]")
+            error = ActionableError(
+                error_type=ErrorType.AGENT_NOT_INITIALIZED,
+                message="No agent available to load skills",
+                suggestions=[
+                    "The agent has not been initialized yet",
+                    "Wait for agent initialization to complete",
+                    "Try starting a new session if this persists",
+                ],
+                recovery_commands=["/help"],
+                severity="warning",
+            )
+            render_error(error, self.console)
             return False
-            
+
+        # Get available skills for validation
+        memory_manager = getattr(agent, '_memory_manager', None)
+        available_skills = []
+        if memory_manager:
+            skills_block = memory_manager.get_skills_block()
+            if skills_block and skills_block.skills:
+                available_skills = [s.skill_id for s in skills_block.skills]
+
         # This would integrate with skill tools
         self.console.print(f"[green]Loading skill: {args}[/green]")
         self.console.print("[dim]Use agent tools for actual skill loading[/dim]")
@@ -218,14 +289,32 @@ class RichInputHandler:
     def _cmd_unload_skill(self, args: str, context: Dict[str, Any]) -> bool:
         """Unload a skill."""
         if not args:
-            self.console.print("[red]Usage: /unload <skill_id>[/red]")
+            error = make_missing_argument_error(
+                command="/unload",
+                missing_arg="skill_id",
+                expected_type="skill identifier of a currently loaded skill",
+                usage_example="/unload code-review",
+            )
+            error.severity = "warning"
+            render_error(error, self.console)
             return False
-            
+
         agent = context.get("agent")
         if not agent:
-            self.console.print("[red]No agent available[/red]")
+            error = ActionableError(
+                error_type=ErrorType.AGENT_NOT_INITIALIZED,
+                message="No agent available to unload skills",
+                suggestions=[
+                    "The agent has not been initialized yet",
+                    "Wait for agent initialization to complete",
+                    "Try starting a new session if this persists",
+                ],
+                recovery_commands=["/help"],
+                severity="warning",
+            )
+            render_error(error, self.console)
             return False
-            
+
         self.console.print(f"[yellow]Unloading skill: {args}[/yellow]")
         self.console.print("[dim]Use agent tools for actual skill unloading[/dim]")
         return False
@@ -234,12 +323,34 @@ class RichInputHandler:
         """List available skills."""
         agent = context.get("agent")
         if not agent:
-            self.console.print("[red]No agent available[/red]")
+            error = ActionableError(
+                error_type=ErrorType.AGENT_NOT_INITIALIZED,
+                message="No agent available to list skills",
+                suggestions=[
+                    "The agent has not been initialized yet",
+                    "Wait for agent initialization to complete",
+                    "Try starting a new session if this persists",
+                ],
+                recovery_commands=["/help"],
+                severity="warning",
+            )
+            render_error(error, self.console)
             return False
-            
+
         memory_manager = getattr(agent, '_memory_manager', None)
         if not memory_manager:
-            self.console.print("[red]No memory manager available[/red]")
+            error = ActionableError(
+                error_type=ErrorType.SKILL_ERROR,
+                message="No memory manager available for skill operations",
+                suggestions=[
+                    "The agent may not be fully initialized",
+                    "Skills require a memory manager to be configured",
+                    "Check the agent configuration",
+                ],
+                recovery_commands=["/status"],
+                severity="warning",
+            )
+            render_error(error, self.console)
             return False
             
         # List loaded skills
