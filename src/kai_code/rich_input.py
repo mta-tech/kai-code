@@ -82,6 +82,71 @@ class InputState:
         return False
 
 
+def format_shortcut_hint(
+    key: str, display: str, include_separator: bool = True
+) -> list[tuple[str, str]]:
+    """Format a keyboard shortcut hint with consistent styling.
+
+    Formats shortcut hints for the bottom toolbar with distinct styles for
+    the key combination and description text. This ensures visual consistency
+    across all shortcut hints displayed in the toolbar.
+
+    Args:
+        key: The key combination string (e.g., "Ctrl+E", "ESC ESC").
+        display: The short description (e.g., "editor", "cancel").
+        include_separator: Whether to include a leading separator " | ".
+
+    Returns:
+        List of (style_class, text) tuples for prompt_toolkit formatted text.
+        Example: [("", " | "), ("class:toolbar-key", "Ctrl+E"), ("", " "),
+                  ("class:toolbar-shortcut", "editor")]
+    """
+    parts: list[tuple[str, str]] = []
+
+    # Add separator if requested (for chaining multiple hints)
+    if include_separator:
+        parts.append(("", " | "))
+
+    # Key combination with distinct styling (e.g., "Ctrl+E")
+    parts.append(("class:toolbar-key", key))
+
+    # Space between key and description
+    parts.append(("", " "))
+
+    # Description with subdued styling (e.g., "editor")
+    parts.append(("class:toolbar-shortcut", display))
+
+    return parts
+
+
+def format_shortcut_from_registry(
+    shortcut_id: str, include_separator: bool = True
+) -> list[tuple[str, str]]:
+    """Format a shortcut hint from the KEYBOARD_SHORTCUTS registry.
+
+    Convenience function to format a shortcut by its registry ID,
+    looking up the key and display text automatically.
+
+    Args:
+        shortcut_id: The shortcut identifier in KEYBOARD_SHORTCUTS (e.g., "ctrl_e").
+        include_separator: Whether to include a leading separator " | ".
+
+    Returns:
+        List of (style_class, text) tuples, or empty list if shortcut not found.
+    """
+    from .rich_config import KEYBOARD_SHORTCUTS
+
+    shortcut = KEYBOARD_SHORTCUTS.get(shortcut_id)
+    if not shortcut:
+        return []
+
+    return format_shortcut_hint(
+        key=shortcut["key"],
+        display=shortcut["display"],
+        include_separator=include_separator,
+    )
+
+
 def detect_input_state(session: PromptSession | None) -> InputState:
     """Detect the current input state from a PromptSession.
 
@@ -596,6 +661,8 @@ def create_prompt_session(
             "toolbar-task": "bg:#8b5cf6 #ffffff",  # Purple for background tasks
             "toolbar-model": "bg:#3b82f6 #ffffff",  # Blue for current model
             "toolbar-hint": "#6b7280",  # Dim gray for hints
+            "toolbar-key": "#94a3b8 bold",  # Brighter gray bold for shortcut keys
+            "toolbar-shortcut": "#64748b",  # Slate gray for shortcut descriptions
         }
     )
 
