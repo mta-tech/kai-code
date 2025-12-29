@@ -38,6 +38,7 @@ from kai_code.cli_ui import (
     render_file_operation,
     render_todo_list,
 )
+from kai_code.errors import ActionableError, ErrorType, render_error
 
 _HITL_REQUEST_ADAPTER = TypeAdapter(HITLRequest)
 
@@ -350,10 +351,24 @@ async def execute_task(
                                     pending_interrupts[interrupt_obj.id] = validated_request
                                     interrupt_occurred = True
                                 except ValidationError as e:
-                                    console.print(
-                                        f"[yellow]Warning: Invalid HITL request data: {e}[/yellow]",
-                                        style="dim",
+                                    error = ActionableError(
+                                        error_type=ErrorType.VALIDATION_ERROR,
+                                        message=f"Invalid HITL request data: {e}",
+                                        suggestions=[
+                                            "This is likely an internal error with the agent's response",
+                                            "Try restarting the agent session",
+                                            "If the problem persists, report it as a bug",
+                                        ],
+                                        recovery_commands=[
+                                            "/quit  # Exit and restart the session",
+                                        ],
+                                        severity="warning",
+                                        context={
+                                            "error_type": "ValidationError",
+                                            "details": str(e)[:200],
+                                        },
                                     )
+                                    render_error(error, console=console)
                                     raise
 
                     # Extract chunk_data from updates for todo checking
@@ -413,9 +428,28 @@ async def execute_task(
                                 if spinner_active:
                                     status.stop()
                                     spinner_active = False
-                                console.print()
-                                console.print(tool_content, style="red", markup=False)
-                                console.print()
+                                # Build suggestions based on common error patterns
+                                suggestions = [
+                                    "The agent will analyze this error and adjust its approach",
+                                    "You can provide additional context if needed",
+                                ]
+                                # Add specific suggestions based on error content
+                                content_lower = str(tool_content).lower()
+                                if "permission denied" in content_lower:
+                                    suggestions.insert(0, "This may require elevated permissions (sudo)")
+                                elif "command not found" in content_lower:
+                                    suggestions.insert(0, "The command may not be installed or in PATH")
+                                elif "no such file" in content_lower:
+                                    suggestions.insert(0, "Check that the file path exists and is correct")
+
+                                error = ActionableError(
+                                    error_type=ErrorType.COMMAND_EXECUTION_ERROR,
+                                    message=f"Shell command failed ({tool_name})",
+                                    suggestions=suggestions,
+                                    severity="warning",
+                                    context={"output": str(tool_content)[:500]},
+                                )
+                                render_error(error, console=console)
                         elif tool_content and isinstance(tool_content, str):
                             stripped = tool_content.lstrip()
                             if stripped.lower().startswith("error"):
@@ -423,9 +457,17 @@ async def execute_task(
                                 if spinner_active:
                                     status.stop()
                                     spinner_active = False
-                                console.print()
-                                console.print(tool_content, style="red", markup=False)
-                                console.print()
+                                error = ActionableError(
+                                    error_type=ErrorType.COMMAND_EXECUTION_ERROR,
+                                    message="Tool execution reported an error",
+                                    suggestions=[
+                                        "The agent will analyze this error and adjust its approach",
+                                        "You can provide additional guidance if needed",
+                                    ],
+                                    severity="warning",
+                                    context={"tool": tool_name, "output": tool_content[:500]},
+                                )
+                                render_error(error, console=console)
 
                         if record:
                             flush_text_buffer(final=True)
@@ -662,9 +704,17 @@ async def execute_task(
                         status.stop()
                         spinner_active = False
 
-                    console.print("[yellow]Command rejected.[/yellow]", style="bold")
-                    console.print("Tell the agent what you'd like to do differently.")
-                    console.print()
+                    error = ActionableError(
+                        error_type=ErrorType.TOOL_NOT_ALLOWED,
+                        message="Command rejected",
+                        suggestions=[
+                            "Tell the agent what you'd like to do differently",
+                            "You can suggest an alternative approach",
+                            "Ask the agent to explain its reasoning before proceeding",
+                        ],
+                        severity="warning",
+                    )
+                    render_error(error, console=console)
                     return
 
                 # Resume the agent with the human decision
@@ -678,7 +728,19 @@ async def execute_task(
         # Event loop cancelled the task (e.g. Ctrl+C during streaming) - clean up and return
         if spinner_active:
             status.stop()
-        console.print("\n[yellow]Interrupted by user[/yellow]")
+
+        error = ActionableError(
+            error_type=ErrorType.SESSION_ERROR,
+            message="Task interrupted by user",
+            suggestions=[
+                "The agent's current task has been cancelled",
+                "You can continue with a new prompt",
+                "The conversation context is preserved",
+            ],
+            severity="warning",
+        )
+        render_error(error, console=console)
+
         console.print("Updating agent state...", style="dim")
 
         try:
@@ -692,7 +754,20 @@ async def execute_task(
             )
             console.print("Ready for next command.\n", style="dim")
         except Exception as e:
-            console.print(f"[red]Warning: Failed to update agent state: {e}[/red]\n")
+            state_error = ActionableError(
+                error_type=ErrorType.SESSION_ERROR,
+                message=f"Failed to update agent state: {e}",
+                suggestions=[
+                    "The session may be in an inconsistent state",
+                    "Consider starting a new session if you encounter issues",
+                ],
+                recovery_commands=[
+                    "/quit  # Exit and restart if needed",
+                ],
+                severity="warning",
+                context={"error_details": str(e)[:200]},
+            )
+            render_error(state_error, console=console)
 
         return
 
@@ -700,7 +775,19 @@ async def execute_task(
         # User pressed Ctrl+C - clean up and exit gracefully
         if spinner_active:
             status.stop()
-        console.print("\n[yellow]Interrupted by user[/yellow]")
+
+        error = ActionableError(
+            error_type=ErrorType.SESSION_ERROR,
+            message="Interrupted by user (Ctrl+C)",
+            suggestions=[
+                "The agent's current task has been cancelled",
+                "You can continue with a new prompt",
+                "The conversation context is preserved",
+            ],
+            severity="warning",
+        )
+        render_error(error, console=console)
+
         console.print("Updating agent state...", style="dim")
 
         # Inform the agent synchronously (in async context)
@@ -715,7 +802,20 @@ async def execute_task(
             )
             console.print("Ready for next command.\n", style="dim")
         except Exception as e:
-            console.print(f"[red]Warning: Failed to update agent state: {e}[/red]\n")
+            state_error = ActionableError(
+                error_type=ErrorType.SESSION_ERROR,
+                message=f"Failed to update agent state: {e}",
+                suggestions=[
+                    "The session may be in an inconsistent state",
+                    "Consider starting a new session if you encounter issues",
+                ],
+                recovery_commands=[
+                    "/quit  # Exit and restart if needed",
+                ],
+                severity="warning",
+                context={"error_details": str(e)[:200]},
+            )
+            render_error(state_error, console=console)
 
         return
 
