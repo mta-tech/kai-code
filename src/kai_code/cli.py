@@ -1359,11 +1359,12 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     run_id = uuid.uuid4().hex
-    started = now_ms()
+    started_ms = now_ms()
+    stats = RunStats(started_ms=started_ms, ended_ms=started_ms)
     try:
         result = agent.run(prompt)
     except Exception as e:
-        ended = now_ms()
+        stats.ended_ms = now_ms()
         include_tb = _traceback_enabled(bool(args.include_traceback or args.stream_include_traceback))
         if args.output_format == "json":
             print(
@@ -1378,8 +1379,8 @@ def main(argv: list[str] | None = None) -> int:
                         tools=getattr(agent.config, "enabled_tools", None),
                         err=e,
                         include_traceback=include_tb,
-                        started_ms=started,
-                        ended_ms=ended,
+                        started_ms=started_ms,
+                        ended_ms=stats.ended_ms,
                     ),
                     indent=2,
                 )
@@ -1390,41 +1391,44 @@ def main(argv: list[str] | None = None) -> int:
         if include_tb:
             print(traceback.format_exc(), file=sys.stderr)
         return EXIT_ERROR
-    ended = now_ms()
+    stats.ended_ms = now_ms()
 
     # Best-effort stop_reason and token usage from the last assistant message.
     msgs = result.messages
     u_total = aggregate_usage(msgs)
-    token_usage = {
-        "prompt_tokens": u_total.prompt_tokens,
-        "completion_tokens": u_total.completion_tokens,
-        "total_tokens": u_total.total_tokens,
-        "cached_input_tokens": u_total.cached_input_tokens,
-        "reasoning_tokens": u_total.reasoning_tokens,
-    }
+    stats.add_token_usage(
+        prompt=u_total.prompt_tokens,
+        completion=u_total.completion_tokens,
+        total=u_total.total_tokens,
+        cached=u_total.cached_input_tokens,
+        reasoning=u_total.reasoning_tokens,
+    )
     stop_reason: str | None = last_stop_reason(msgs)
 
     is_interrupt = isinstance(result.raw, dict) and bool(result.raw.get("__interrupt__"))
     if stop_reason is None:
         stop_reason = "interrupt" if is_interrupt else "end_turn"
 
-    turn_count, step_count = count_turns_steps(msgs)
+    stats.message_count = len(msgs)
+    stats.turn_count, stats.step_count = count_turns_steps(msgs)
 
-    stats = {
-        "duration_ms": max(0, ended - started),
-        "started_ms": started,
-        "ended_ms": ended,
-        "permission_mode": permission_mode,
-        "message_count": len(result.messages),
-        "ttft_ms": None,
-        "stop_reason": stop_reason,
-        "token_usage": token_usage,
-        "turn_count": turn_count,
-        "step_count": step_count,
-    }
+    # Detect tool events from messages for consistent metrics
+    tool_events = detect_tool_events_from_messages(msgs)
+    for te in tool_events:
+        if te.kind == "tool_call":
+            stats.record_tool_call(te.tool_name)
+        elif te.kind == "tool_result":
+            # Detect if this is an error result
+            result_fields = extract_tool_result_fields(te)
+            is_error = (
+                result_fields.get("status") == "error"
+                or (result_fields.get("exit_code") is not None and result_fields.get("exit_code") != 0)
+            )
+            stats.record_tool_result(te.tool_name or "", latency_ms=None, is_error=is_error)
 
     # Detect HITL interrupt (LangGraph convention)
     if isinstance(result.raw, dict) and result.raw.get("__interrupt__"):
+        stats.interrupted = True
         payload = {
             "type": "interrupt",
             "run_id": run_id,
@@ -1432,7 +1436,7 @@ def main(argv: list[str] | None = None) -> int:
             "state_path": str(state_path),
             "tools": getattr(agent.config, "enabled_tools", None),
             "interrupt": _safe_json(result.raw.get("__interrupt__")),
-            "stats": stats,
+            "stats": stats.to_dict(),
             "stop_reason": "interrupt",
             "resume_hint": "kai resume --continue --approve",
         }
@@ -1454,7 +1458,7 @@ def main(argv: list[str] | None = None) -> int:
             "tools": getattr(agent.config, "enabled_tools", None),
             "stop_reason": stop_reason,
             "messages": result.messages,
-            "stats": stats,
+            "stats": stats.to_dict(),
         }
         print(json.dumps(payload, indent=2))
         return EXIT_SUCCESS
