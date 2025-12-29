@@ -227,6 +227,64 @@ class TokenTracker:
             return "warning"
         return "normal"
 
+    def _format_tokens_compact(self, tokens: int) -> str:
+        """Format token count in compact K/M notation.
+
+        Args:
+            tokens: Token count to format
+
+        Returns:
+            Formatted string like '45K', '1.2M', '200K'
+        """
+        if tokens >= 1_000_000:
+            # For millions, show 1 decimal place if not whole number
+            value = tokens / 1_000_000
+            if value == int(value):
+                return f"{int(value)}M"
+            return f"{value:.1f}M"
+        elif tokens >= 1_000:
+            # For thousands, show 1 decimal place if < 10K, otherwise whole number
+            value = tokens / 1_000
+            if value < 10 and value != int(value):
+                return f"{value:.1f}K"
+            return f"{int(value)}K"
+        else:
+            return str(tokens)
+
+    def format_compact_display(self) -> str:
+        """Format current token usage as a compact display string.
+
+        Returns formatted strings based on context status:
+        - Normal: '45K/200K [23%]'
+        - Warning: '160K/200K ⚠️ 80%'
+        - Critical: '190K/200K 🚨 95%'
+        - Unknown (no limit): '45K tokens'
+
+        Returns:
+            Compact formatted string for status bar display
+        """
+        current = self._format_tokens_compact(self.current_context)
+
+        if self._context_limit is None:
+            # No limit set - just show current tokens
+            return f"{current} tokens"
+
+        limit = self._format_tokens_compact(self._context_limit)
+        percentage = self.get_usage_percentage()
+        status = self.get_status_level()
+
+        if percentage is None:
+            return f"{current}/{limit}"
+
+        percent_int = int(percentage * 100)
+
+        if status == "critical":
+            return f"{current}/{limit} 🚨 {percent_int}%"
+        elif status == "warning":
+            return f"{current}/{limit} ⚠️ {percent_int}%"
+        else:
+            return f"{current}/{limit} [{percent_int}%]"
+
     def set_baseline(self, tokens: int) -> None:
         """Set the baseline context token count.
 
