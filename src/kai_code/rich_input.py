@@ -52,6 +52,7 @@ class InputState:
         completion_active: True if the completion menu is visible (maps to COMPLETION_ACTIVE).
         text_length: Length of the current input text.
         line_count: Number of lines in the current input.
+        has_at_mention: True if the input contains an @ file mention.
     """
 
     has_text: bool = False
@@ -60,6 +61,7 @@ class InputState:
     completion_active: bool = False
     text_length: int = 0
     line_count: int = 1
+    has_at_mention: bool = False
 
     def matches_context(self, context: ShortcutContext) -> bool:
         """Check if the current input state matches a shortcut context.
@@ -321,6 +323,9 @@ def detect_input_state(session: PromptSession | None) -> InputState:
         # Check if completion menu is active
         completion_active = buffer.complete_state is not None
 
+        # Check for @ file mentions (e.g., @path/to/file)
+        has_at_mention = AT_MENTION_RE.search(text) is not None or "@" in text
+
         return InputState(
             has_text=has_text,
             is_multi_line=is_multi_line,
@@ -328,6 +333,7 @@ def detect_input_state(session: PromptSession | None) -> InputState:
             completion_active=completion_active,
             text_length=text_length,
             line_count=line_count,
+            has_at_mention=has_at_mention,
         )
     except (AttributeError, TypeError):
         # Silently return default state if session is not fully initialized
@@ -593,8 +599,16 @@ def get_bottom_toolbar(
                     include_separator=True,
                 ))
 
-        # When multi-line input: show Alt+Enter newline hint
-        if input_state.is_multi_line:
+        # Show Alt+Enter newline hint contextually when user might want multi-line input:
+        # - When already multi-line (user is writing multiple lines)
+        # - When @ file is mentioned (likely writing a longer prompt about the file)
+        # - When user has typed text (might want to add additional context on new lines)
+        wants_multiline_hint = (
+            input_state.is_multi_line
+            or input_state.has_at_mention
+            or input_state.has_text
+        )
+        if wants_multiline_hint:
             shortcut_parts = format_shortcut_from_registry("alt_enter", include_separator=False)
             if shortcut_parts:
                 segments.append(ToolbarSegment(
