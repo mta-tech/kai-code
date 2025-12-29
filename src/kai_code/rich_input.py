@@ -8,6 +8,7 @@ import os
 import re
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from prompt_toolkit import PromptSession
@@ -22,7 +23,7 @@ from prompt_toolkit.enums import EditingMode
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.key_binding import KeyBindings
 
-from .rich_config import COLORS, COMMANDS, SessionState, console
+from .rich_config import COLORS, COMMANDS, SessionState, ShortcutContext, console
 from .image_utils import ImageData, get_clipboard_image
 
 # Type for background task callback
@@ -33,6 +34,97 @@ AT_MENTION_RE = re.compile(r"@(?P<path>(?:[^\s@]|(?<=\\)\s)*)$")
 SLASH_COMMAND_RE = re.compile(r"^/(?P<command>[a-z]*)$")
 
 EXIT_CONFIRM_WINDOW = 3.0
+
+
+@dataclass
+class InputState:
+    """Represents the current state of the input buffer for contextual hints.
+
+    This dataclass captures the state of user input to enable contextual
+    keyboard shortcut hints in the bottom toolbar. Each field maps to a
+    ShortcutContext enum value for filtering which shortcuts to display.
+
+    Attributes:
+        has_text: True if the input buffer contains any text (maps to HAS_INPUT).
+        is_multi_line: True if the input contains newline characters (maps to MULTI_LINE).
+        cursor_in_middle: True if cursor is not at the end of text (maps to EDITING).
+        completion_active: True if the completion menu is visible (maps to COMPLETION_ACTIVE).
+        text_length: Length of the current input text.
+        line_count: Number of lines in the current input.
+    """
+
+    has_text: bool = False
+    is_multi_line: bool = False
+    cursor_in_middle: bool = False
+    completion_active: bool = False
+    text_length: int = 0
+    line_count: int = 1
+
+    def matches_context(self, context: ShortcutContext) -> bool:
+        """Check if the current input state matches a shortcut context.
+
+        Args:
+            context: The ShortcutContext to check against.
+
+        Returns:
+            True if the current state satisfies the context requirement.
+        """
+        if context == ShortcutContext.ALWAYS:
+            return True
+        elif context == ShortcutContext.HAS_INPUT:
+            return self.has_text
+        elif context == ShortcutContext.MULTI_LINE:
+            return self.is_multi_line
+        elif context == ShortcutContext.EDITING:
+            return self.cursor_in_middle
+        elif context == ShortcutContext.COMPLETION_ACTIVE:
+            return self.completion_active
+        return False
+
+
+def detect_input_state(session: PromptSession | None) -> InputState:
+    """Detect the current input state from a PromptSession.
+
+    Examines the session's buffer to determine the current input state,
+    enabling contextual display of keyboard shortcut hints.
+
+    Args:
+        session: The active PromptSession, or None if unavailable.
+
+    Returns:
+        InputState with detected values, or default empty state if session is None.
+    """
+    if session is None:
+        return InputState()
+
+    try:
+        buffer = session.default_buffer
+        text = buffer.text
+        cursor_position = buffer.cursor_position
+
+        # Calculate state values
+        has_text = len(text.strip()) > 0
+        is_multi_line = "\n" in text
+        text_length = len(text)
+        line_count = text.count("\n") + 1
+
+        # Cursor is in middle if not at the end of the text
+        cursor_in_middle = cursor_position < text_length
+
+        # Check if completion menu is active
+        completion_active = buffer.complete_state is not None
+
+        return InputState(
+            has_text=has_text,
+            is_multi_line=is_multi_line,
+            cursor_in_middle=cursor_in_middle,
+            completion_active=completion_active,
+            text_length=text_length,
+            line_count=line_count,
+        )
+    except (AttributeError, TypeError):
+        # Silently return default state if session is not fully initialized
+        return InputState()
 
 
 class ImageTracker:
@@ -189,10 +281,19 @@ def parse_image_placeholders(text: str) -> tuple[str, int]:
 def get_bottom_toolbar(
     session_state: SessionState, session_ref: dict
 ) -> Callable[[], list[tuple[str, str]]]:
-    """Return toolbar function that shows auto-approve status, BASH MODE, model, and background tasks."""
+    """Return toolbar function that shows auto-approve status, BASH MODE, model, and background tasks.
+
+    The toolbar detects the current input state to enable contextual keyboard
+    shortcut hints based on whether there is text, multi-line input, cursor
+    position, and completion menu state.
+    """
 
     def toolbar() -> list[tuple[str, str]]:
         parts = []
+
+        # Detect current input state for contextual hints
+        session = session_ref.get("session")
+        input_state = detect_input_state(session)
 
         # Show current model
         if hasattr(session_state, 'model') and session_state.model:
@@ -206,8 +307,8 @@ def get_bottom_toolbar(
                 pass
 
         # Check if we're in BASH mode (input starts with !)
+        # Use detected input_state's underlying text via session
         try:
-            session = session_ref.get("session")
             if session:
                 current_text = session.default_buffer.text
                 if current_text.startswith("!"):
