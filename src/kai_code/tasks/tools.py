@@ -6,15 +6,42 @@ from typing import Annotated
 from langchain_core.tools import tool
 
 from .manager import get_task_manager
-from .task import TaskStatus
+from .task import TaskStatus, TaskPriority
+
+
+def _parse_priority(priority_str: str | None) -> TaskPriority:
+    """Parse a priority string to TaskPriority enum.
+
+    Args:
+        priority_str: Priority string ('high', 'normal', 'low') or None.
+
+    Returns:
+        TaskPriority enum value.
+
+    Raises:
+        ValueError: If priority_str is not a valid priority value.
+    """
+    if priority_str is None:
+        return TaskPriority.NORMAL
+
+    mapping = {
+        "high": TaskPriority.HIGH,
+        "normal": TaskPriority.NORMAL,
+        "low": TaskPriority.LOW,
+    }
+    priority_lower = priority_str.lower()
+    if priority_lower not in mapping:
+        valid = ", ".join(mapping.keys())
+        raise ValueError(f"Invalid priority '{priority_str}'. Must be one of: {valid}")
+    return mapping[priority_lower]
 
 
 @tool
 def list_background_tasks() -> str:
-    """List all background tasks with their status and summary.
+    """List all background tasks with their status, priority, and summary.
 
-    Use this to see what background tasks are running, completed, or failed.
-    Returns a formatted list of all tasks with their IDs, types, descriptions, and status.
+    Use this to see what background tasks are running, queued, completed, or failed.
+    Returns a formatted list of all tasks with their IDs, types, priorities, descriptions, and status.
     """
     manager = get_task_manager()
     tasks = manager.get_all_tasks()
@@ -25,13 +52,19 @@ def list_background_tasks() -> str:
     lines = []
     active = manager.get_active_tasks()
     completed = manager.get_completed_tasks()
+    queued = manager.queued_count()
 
-    lines.append(f"Background Tasks: {len(active)} active, {len(completed)} completed")
+    # Build summary with queued count if any
+    summary_parts = [f"{len(active)} active"]
+    if queued > 0:
+        summary_parts.append(f"{queued} queued")
+    summary_parts.append(f"{len(completed)} completed")
+    lines.append(f"Background Tasks: {', '.join(summary_parts)}")
     lines.append("")
 
-    # Format as table
-    lines.append("ID       | Type   | Status    | Description")
-    lines.append("-" * 60)
+    # Format as table with priority column
+    lines.append("ID       | Type   | Priority | Status    | Description")
+    lines.append("-" * 70)
 
     for task in tasks:
         status_str = {
@@ -40,14 +73,21 @@ def list_background_tasks() -> str:
             TaskStatus.FAILED: "failed",
             TaskStatus.KILLED: "killed",
             TaskStatus.PENDING: "pending",
+            TaskStatus.QUEUED: "queued",
         }.get(task.status, "?")
+
+        priority_str = {
+            TaskPriority.HIGH: "high",
+            TaskPriority.NORMAL: "normal",
+            TaskPriority.LOW: "low",
+        }.get(task.priority, "normal")
 
         # Truncate description
         desc = task.description
-        if len(desc) > 30:
-            desc = desc[:27] + "..."
+        if len(desc) > 25:
+            desc = desc[:22] + "..."
 
-        lines.append(f"{task.id:<8} | {task.type:<6} | {status_str:<9} | {desc}")
+        lines.append(f"{task.id:<8} | {task.type:<6} | {priority_str:<8} | {status_str:<9} | {desc}")
 
     return "\n".join(lines)
 
@@ -132,6 +172,7 @@ def kill_background_task(task_id: Annotated[str, "The ID of the task to kill"]) 
 def run_background_shell(
     command: Annotated[str, "The shell command to run in the background"],
     description: Annotated[str | None, "Optional description of the task"] = None,
+    priority: Annotated[str | None, "Task priority: 'high', 'normal', or 'low'"] = None,
 ) -> str:
     """Run a shell command in the background.
 
@@ -141,12 +182,14 @@ def run_background_shell(
     Args:
         command: The shell command to execute.
         description: Optional description for the task.
+        priority: Task priority ('high', 'normal', 'low'). Defaults to 'normal'.
 
     Returns:
         The task ID.
     """
     manager = get_task_manager()
-    task_id = manager.run_shell(command)
+    task_priority = _parse_priority(priority)
+    task_id = manager.run_shell(command, priority=task_priority)
     if description:
         task = manager.get_task(task_id)
         if task:
@@ -158,6 +201,7 @@ def run_background_shell(
 def run_background_agent(
     prompt: Annotated[str, "The prompt to send to the background agent"],
     description: Annotated[str | None, "Optional description of the task"] = None,
+    priority: Annotated[str | None, "Task priority: 'high', 'normal', or 'low'"] = None,
 ) -> str:
     """Run an agent task in the background.
 
@@ -167,12 +211,14 @@ def run_background_agent(
     Args:
         prompt: The prompt for the agent.
         description: Optional description for the task.
+        priority: Task priority ('high', 'normal', 'low'). Defaults to 'normal'.
 
     Returns:
         The task ID.
     """
     manager = get_task_manager()
-    task_id = manager.run_agent(prompt)
+    task_priority = _parse_priority(priority)
+    task_id = manager.run_agent(prompt, priority=task_priority)
     if description:
         task = manager.get_task(task_id)
         if task:

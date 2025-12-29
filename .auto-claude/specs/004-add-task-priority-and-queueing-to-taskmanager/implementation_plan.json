@@ -1,0 +1,267 @@
+{
+  "feature": "Add Task Priority and Queueing to TaskManager",
+  "description": "Extend TaskManager to support task priorities (high/normal/low) and a proper queue system. High-priority tasks will be executed before normal/low priority tasks when resources are available.",
+  "created_at": "2025-12-29T15:43:13.477Z",
+  "updated_at": "2025-12-29T15:43:13.477Z",
+  "status": "in_progress",
+  "planStatus": "approved",
+  "workflow_type": "development",
+  "services_involved": [
+    "kai_code.tasks"
+  ],
+  "spec_file": "spec.md",
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Core Priority System",
+      "description": "Add priority enum and update Task model to support priorities",
+      "subtasks": [
+        {
+          "id": "1.1",
+          "title": "Add TaskPriority enum to task.py",
+          "description": "Create TaskPriority enum with HIGH=1, NORMAL=2, LOW=3 values (lower number = higher priority for heap ordering). The numeric values enable natural priority queue ordering.",
+          "files": [
+            "src/kai_code/tasks/task.py"
+          ],
+          "status": "completed",
+          "notes": "Added TaskPriority enum with HIGH=1, NORMAL=2, LOW=3 values. Lower numeric values indicate higher priority for heap ordering. Committed in 94fc761.",
+          "updated_at": "2025-12-29T15:53:46.809718+00:00"
+        },
+        {
+          "id": "1.2",
+          "title": "Add QUEUED status to TaskStatus enum",
+          "description": "Add TaskStatus.QUEUED for tasks waiting in the priority queue. Update display_status to handle QUEUED status.",
+          "files": [
+            "src/kai_code/tasks/task.py"
+          ],
+          "status": "completed",
+          "notes": "Added TaskStatus.QUEUED enum value with \"queued\" string value. Updated display_status property to return \"\u23f3 queued\" for QUEUED status. Committed in 61c6cce.",
+          "updated_at": "2025-12-29T15:58:12.403840+00:00"
+        },
+        {
+          "id": "1.3",
+          "title": "Update Task dataclass with priority field",
+          "description": "Add priority field to the Task base class with default value of TaskPriority.NORMAL. Update display_status to optionally show priority indicator.",
+          "files": [
+            "src/kai_code/tasks/task.py"
+          ],
+          "status": "completed",
+          "notes": "Added priority field to Task dataclass with default TaskPriority.NORMAL. Added priority_indicator property returning [H]/[L] for HIGH/LOW priorities. Added get_display_status(show_priority) method for optional priority display while maintaining backward compatibility with display_status property. Committed in ba9242c.",
+          "updated_at": "2025-12-29T16:02:55.384453+00:00"
+        },
+        {
+          "id": "1.4",
+          "title": "Update BackgroundShellTask and BackgroundAgentTask",
+          "description": "Ensure both task types inherit the priority field properly and can be created with a priority parameter.",
+          "files": [
+            "src/kai_code/tasks/task.py"
+          ],
+          "status": "completed",
+          "notes": "Both BackgroundShellTask and BackgroundAgentTask inherit the priority field automatically via Python dataclass inheritance. No code changes needed - the priority field from Task (added in 1.3) is inherited by child dataclasses and can be passed as constructor parameter: BackgroundShellTask(command=\"...\", priority=TaskPriority.HIGH). Default is TaskPriority.NORMAL.",
+          "updated_at": "2025-12-29T16:09:42.030334+00:00"
+        }
+      ]
+    },
+    {
+      "id": "phase-2",
+      "name": "Priority Queue Implementation",
+      "description": "Implement thread-safe priority queue for task queueing",
+      "subtasks": [
+        {
+          "id": "2.1",
+          "title": "Create PriorityTaskQueue class in manager.py",
+          "description": "Implement a thread-safe priority queue using Python's heapq and threading.Lock. Queue entries should be tuples of (priority_value, creation_time, task_id, task) to ensure stable ordering (tasks with same priority are ordered by creation time).",
+          "files": [
+            "src/kai_code/tasks/manager.py"
+          ],
+          "status": "completed",
+          "notes": "Implemented PriorityTaskQueue class in manager.py with thread-safe operations using heapq and threading.Lock. Queue entries are tuples of (priority_value, creation_time, task_id, task) ensuring stable ordering - high priority first, FIFO for same priority. Methods: push(), pop(), peek(), remove(), clear(), get_all(), is_empty(), __len__(), __bool__(). Committed in 2001f0d.",
+          "updated_at": "2025-12-29T16:20:15.416099+00:00"
+        },
+        {
+          "id": "2.2",
+          "title": "Add queue processing logic to TaskManager",
+          "description": "Add a pending queue (_pending_queue: PriorityTaskQueue), a method to check available slots (_available_slots), and a method to process the queue (_process_queue) that starts queued tasks when slots are available.",
+          "files": [
+            "src/kai_code/tasks/manager.py"
+          ],
+          "status": "completed",
+          "notes": "Added _pending_queue (PriorityTaskQueue), _available_slots() method to check running task count vs MAX_CONCURRENT_TASKS, and _process_queue() method to dequeue and start highest-priority tasks when slots are available. Committed in eecef89.",
+          "updated_at": "2025-12-29T16:29:40.185123+00:00"
+        },
+        {
+          "id": "2.3",
+          "title": "Update _submit_task to use queue",
+          "description": "Modify _submit_task to: 1) Add task to pending queue with QUEUED status instead of immediately starting, 2) Call _process_queue to start tasks if slots available.",
+          "files": [
+            "src/kai_code/tasks/manager.py"
+          ],
+          "status": "completed",
+          "notes": "Modified _submit_task to: 1) Set task status to QUEUED, 2) Add task to _pending_queue via push(), 3) Call _process_queue() to start tasks if slots available. Tasks now flow through the priority queue system before being started. Committed in 91c6760.",
+          "updated_at": "2025-12-29T16:40:17.393583+00:00"
+        },
+        {
+          "id": "2.4",
+          "title": "Update _notify_completion to trigger queue processing",
+          "description": "When a task completes, call _process_queue to start the next highest-priority queued task if slots are available.",
+          "files": [
+            "src/kai_code/tasks/manager.py"
+          ],
+          "status": "completed",
+          "notes": "Updated _notify_completion to call _process_queue() after notifying callbacks. When a task completes, this automatically starts the next highest-priority queued task if slots are available. Updated docstring to reflect this behavior. Committed in 9987012.",
+          "updated_at": "2025-12-29T16:44:48.983120+00:00"
+        }
+      ]
+    },
+    {
+      "id": "phase-3",
+      "name": "API Updates",
+      "description": "Update public APIs to accept priority parameter",
+      "subtasks": [
+        {
+          "id": "3.1",
+          "title": "Update run_shell() and run_agent() method signatures",
+          "description": "Add optional priority parameter to run_shell() and run_agent() methods. Default to TaskPriority.NORMAL. Pass priority to task constructors.",
+          "files": [
+            "src/kai_code/tasks/manager.py"
+          ],
+          "status": "pending",
+          "notes": ""
+        },
+        {
+          "id": "3.2",
+          "title": "Add query methods for priority and queue",
+          "description": "Add get_queued_tasks(), get_tasks_by_priority(), and queued_count() methods to TaskManager. Update get_active_tasks to include QUEUED status.",
+          "files": [
+            "src/kai_code/tasks/manager.py"
+          ],
+          "status": "pending",
+          "notes": ""
+        },
+        {
+          "id": "3.3",
+          "title": "Update run_background_shell and run_background_agent tools",
+          "description": "Add optional priority parameter to both LangChain tools. Accept string values 'high', 'normal', 'low' and convert to TaskPriority enum.",
+          "files": [
+            "src/kai_code/tasks/tools.py"
+          ],
+          "status": "pending",
+          "notes": ""
+        },
+        {
+          "id": "3.4",
+          "title": "Update list_background_tasks to show priority",
+          "description": "Include priority column in the task listing output so users can see task priorities.",
+          "files": [
+            "src/kai_code/tasks/tools.py"
+          ],
+          "status": "pending",
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "id": "phase-4",
+      "name": "UI Updates",
+      "description": "Update Rich panel to display priority and queued tasks",
+      "subtasks": [
+        {
+          "id": "4.1",
+          "title": "Add QUEUED status styling and priority display",
+          "description": "Add color/style for QUEUED status in _get_status_style(). Add priority indicator to task row display (e.g., [H] for high, [L] for low).",
+          "files": [
+            "src/kai_code/tasks/panel.py"
+          ],
+          "status": "pending",
+          "notes": ""
+        },
+        {
+          "id": "4.2",
+          "title": "Update panel sections to show queued tasks",
+          "description": "Update _static_panel and _render_task_list to show a 'Queued' section for pending tasks in the priority queue. Update format_tasks_summary to include queued count.",
+          "files": [
+            "src/kai_code/tasks/panel.py"
+          ],
+          "status": "pending",
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "id": "phase-5",
+      "name": "Exports and Documentation",
+      "description": "Update module exports and add inline documentation",
+      "subtasks": [
+        {
+          "id": "5.1",
+          "title": "Update __init__.py exports",
+          "description": "Export TaskPriority from the tasks module __init__.py so it can be imported as 'from kai_code.tasks import TaskPriority'. Update module docstring with priority usage examples.",
+          "files": [
+            "src/kai_code/tasks/__init__.py"
+          ],
+          "status": "pending",
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "id": "phase-6",
+      "name": "Testing",
+      "description": "Add comprehensive tests for priority and queueing functionality",
+      "subtasks": [
+        {
+          "id": "6.1",
+          "title": "Add tests for TaskPriority and Task priority field",
+          "description": "Test that TaskPriority enum has correct values and ordering. Test that tasks can be created with different priorities and default is NORMAL.",
+          "files": [
+            "tests/test_tasks.py"
+          ],
+          "status": "pending",
+          "notes": ""
+        },
+        {
+          "id": "6.2",
+          "title": "Add tests for PriorityTaskQueue and queue processing",
+          "description": "Test queue ordering: high priority tasks should be dequeued before normal, which should be before low. Test same-priority ordering by creation time. Test that tasks are queued when MAX_CONCURRENT_TASKS is reached.",
+          "files": [
+            "tests/test_tasks.py"
+          ],
+          "status": "pending",
+          "notes": ""
+        },
+        {
+          "id": "6.3",
+          "title": "Add tests for priority in tools and query methods",
+          "description": "Test run_background_shell and run_background_agent tools with priority parameter. Test get_queued_tasks(), get_tasks_by_priority(), and queued_count() methods.",
+          "files": [
+            "tests/test_tasks.py"
+          ],
+          "status": "pending",
+          "notes": ""
+        },
+        {
+          "id": "6.4",
+          "title": "Run full test suite and fix regressions",
+          "description": "Run pytest to ensure all existing tests pass and new tests pass. Fix any regressions introduced by the changes.",
+          "files": [],
+          "status": "pending",
+          "notes": ""
+        }
+      ]
+    }
+  ],
+  "final_acceptance": [
+    "All existing tests pass",
+    "New priority tests pass",
+    "High-priority tasks execute before lower-priority tasks",
+    "Queue system respects MAX_CONCURRENT_TASKS limit",
+    "UI displays priority and queued tasks correctly",
+    "Tools accept priority parameter"
+  ],
+  "qa_signoff": {
+    "status": "pending",
+    "tests_passed": "",
+    "issues": ""
+  },
+  "last_updated": "2025-12-29T16:44:48.983141+00:00"
+}

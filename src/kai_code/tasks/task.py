@@ -18,10 +18,23 @@ class TaskStatus(Enum):
     """Status of a background task."""
 
     PENDING = "pending"
+    QUEUED = "queued"
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
     KILLED = "killed"
+
+
+class TaskPriority(Enum):
+    """Priority level for task scheduling.
+
+    Lower numeric values indicate higher priority for heap ordering.
+    HIGH priority tasks are executed before NORMAL, which execute before LOW.
+    """
+
+    HIGH = 1
+    NORMAL = 2
+    LOW = 3
 
 
 @dataclass
@@ -32,6 +45,7 @@ class Task:
     type: Literal["shell", "agent"] = "shell"
     description: str = ""
     status: TaskStatus = TaskStatus.PENDING
+    priority: TaskPriority = TaskPriority.NORMAL
     output: str = ""
     created_at: datetime = field(default_factory=datetime.now)
     finished_at: datetime | None = None
@@ -77,21 +91,53 @@ class Task:
         return None
 
     @property
-    def display_status(self) -> str:
-        """Get display string for status."""
+    def priority_indicator(self) -> str:
+        """Get priority indicator string.
+
+        Returns empty string for NORMAL priority (the default),
+        or [H]/[L] prefix for HIGH/LOW priority respectively.
+        """
+        if self.priority == TaskPriority.HIGH:
+            return "[H] "
+        elif self.priority == TaskPriority.LOW:
+            return "[L] "
+        return ""
+
+    def get_display_status(self, show_priority: bool = False) -> str:
+        """Get display string for status.
+
+        Args:
+            show_priority: If True, prepend priority indicator for non-NORMAL priorities.
+
+        Returns:
+            Formatted status string with optional priority prefix.
+        """
+        priority_prefix = self.priority_indicator if show_priority else ""
+
         if self.status == TaskStatus.RUNNING:
             duration = self.duration or 0
-            return f"⟳ {duration:.1f}s"
+            return f"{priority_prefix}⟳ {duration:.1f}s"
         elif self.status == TaskStatus.COMPLETED:
             duration = self.duration or 0
-            return f"✓ done ({duration:.1f}s)"
+            return f"{priority_prefix}✓ done ({duration:.1f}s)"
         elif self.status == TaskStatus.FAILED:
-            return "✗ failed"
+            return f"{priority_prefix}✗ failed"
         elif self.status == TaskStatus.KILLED:
-            return "killed"
+            return f"{priority_prefix}killed"
         elif self.status == TaskStatus.PENDING:
-            return "pending"
-        return str(self.status.value)
+            return f"{priority_prefix}pending"
+        elif self.status == TaskStatus.QUEUED:
+            return f"{priority_prefix}⏳ queued"
+        return f"{priority_prefix}{self.status.value}"
+
+    @property
+    def display_status(self) -> str:
+        """Get display string for status (without priority indicator).
+
+        For backward compatibility, this property does not show priority.
+        Use get_display_status(show_priority=True) to include priority indicator.
+        """
+        return self.get_display_status(show_priority=False)
 
 
 @dataclass
