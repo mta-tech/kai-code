@@ -77,7 +77,20 @@ class StyleMemoryBlock(MemoryBlock):
 @dataclass
 class HumanMemoryBlock(MemoryBlock):
     """Memory block for human user information."""
-    
+
     def __post_init__(self):
         self.label = "human"
         self.description = "User information and preferences"
+
+
+@dataclass
+class ConversationHistoryEntry:
+    """Represents a single entry in the conversation history.
+
+    Used to store summarized versions of conversation messages
+    for long-term context retention.
+    """
+    timestamp: str
+    role: str  # "user" or "assistant"
+    summary: str
+    message_id: Optional[str] = None
