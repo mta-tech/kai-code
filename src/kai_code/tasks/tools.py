@@ -38,10 +38,10 @@ def _parse_priority(priority_str: str | None) -> TaskPriority:
 
 @tool
 def list_background_tasks() -> str:
-    """List all background tasks with their status and summary.
+    """List all background tasks with their status, priority, and summary.
 
-    Use this to see what background tasks are running, completed, or failed.
-    Returns a formatted list of all tasks with their IDs, types, descriptions, and status.
+    Use this to see what background tasks are running, queued, completed, or failed.
+    Returns a formatted list of all tasks with their IDs, types, priorities, descriptions, and status.
     """
     manager = get_task_manager()
     tasks = manager.get_all_tasks()
@@ -52,13 +52,19 @@ def list_background_tasks() -> str:
     lines = []
     active = manager.get_active_tasks()
     completed = manager.get_completed_tasks()
+    queued = manager.queued_count()
 
-    lines.append(f"Background Tasks: {len(active)} active, {len(completed)} completed")
+    # Build summary with queued count if any
+    summary_parts = [f"{len(active)} active"]
+    if queued > 0:
+        summary_parts.append(f"{queued} queued")
+    summary_parts.append(f"{len(completed)} completed")
+    lines.append(f"Background Tasks: {', '.join(summary_parts)}")
     lines.append("")
 
-    # Format as table
-    lines.append("ID       | Type   | Status    | Description")
-    lines.append("-" * 60)
+    # Format as table with priority column
+    lines.append("ID       | Type   | Priority | Status    | Description")
+    lines.append("-" * 70)
 
     for task in tasks:
         status_str = {
@@ -67,14 +73,21 @@ def list_background_tasks() -> str:
             TaskStatus.FAILED: "failed",
             TaskStatus.KILLED: "killed",
             TaskStatus.PENDING: "pending",
+            TaskStatus.QUEUED: "queued",
         }.get(task.status, "?")
+
+        priority_str = {
+            TaskPriority.HIGH: "high",
+            TaskPriority.NORMAL: "normal",
+            TaskPriority.LOW: "low",
+        }.get(task.priority, "normal")
 
         # Truncate description
         desc = task.description
-        if len(desc) > 30:
-            desc = desc[:27] + "..."
+        if len(desc) > 25:
+            desc = desc[:22] + "..."
 
-        lines.append(f"{task.id:<8} | {task.type:<6} | {status_str:<9} | {desc}")
+        lines.append(f"{task.id:<8} | {task.type:<6} | {priority_str:<8} | {status_str:<9} | {desc}")
 
     return "\n".join(lines)
 
