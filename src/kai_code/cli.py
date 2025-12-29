@@ -26,6 +26,12 @@ from .settings import (
 )
 from .stats import RunStats, now_ms
 from .envfile import load_dotenv
+from .errors import ActionableError, ErrorType, render_error
+from .error_suggestions import (
+    PROVIDER_API_KEY_INSTRUCTIONS,
+    make_api_key_missing_error,
+    make_missing_argument_error,
+)
 EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 EXIT_INTERRUPT = 2
@@ -117,7 +123,26 @@ def _read_prompt(args: argparse.Namespace) -> str:
         return " ".join(args.prompt_args).strip()
     if not sys.stdin.isatty():
         return sys.stdin.read().strip()
-    raise SystemExit("Error: No prompt provided. Use -p/--prompt or pipe stdin.")
+    # No prompt provided - create actionable error
+    error = make_missing_argument_error(
+        command="kai",
+        missing_arg="prompt",
+        expected_type="text string or stdin input",
+        usage_example='kai -p "Your prompt here"',
+    )
+    # Add CLI-specific suggestions
+    error.suggestions.extend([
+        "Pipe input via stdin: echo 'prompt' | kai",
+        "Use interactive mode: kai -i",
+    ])
+    error.recovery_commands = [
+        '# Example: kai -p "Your prompt here"',
+        "# Or pipe: echo 'Your prompt' | kai",
+        "# Or interactive: kai -i",
+        "kai --help",
+    ]
+    render_error(error)
+    raise SystemExit(EXIT_ERROR)
 
 
 def _resolve_root_dir(value: str | None) -> Path:
@@ -190,7 +215,31 @@ def _resolve_state_path(
         global_last = load_global_last_session()
         if global_last:
             return Path(global_last).expanduser().resolve()
-        raise SystemExit("Error: --continue requested but no previous session found")
+        # No previous session found - create actionable error
+        error = ActionableError(
+            error_type=ErrorType.SESSION_ERROR,
+            message="Cannot continue: no previous session found",
+            suggestions=[
+                "Start a new session first with 'kai -p \"your prompt\"'",
+                "Use --state-path to specify a session file explicitly",
+                "Use --agent to create or continue a named agent session",
+                "Check if .kai/ directory exists in your project",
+            ],
+            recovery_commands=[
+                '# Start a new session:',
+                'kai -p "Your prompt here"',
+                '# Or specify a session file:',
+                'kai --state-path path/to/session.json --continue',
+                '# Or use a named agent:',
+                'kai --agent my-agent -p "Your prompt"',
+            ],
+            context={
+                "root_dir": str(root_dir),
+                "kai_dir": str(root_dir / ".kai"),
+            },
+        )
+        render_error(error)
+        raise SystemExit(EXIT_ERROR)
 
     if settings.last_session:
         return (root_dir / settings.last_session).resolve()
@@ -1322,9 +1371,12 @@ def main(argv: list[str] | None = None) -> int:
     provider = _provider_from_model(model)
     required_vars = _credentials_env_vars(provider)
     if required_vars and not _has_any_env(required_vars):
-        hint = f"Missing credentials for provider '{provider}'. Set one of: {', '.join(required_vars)}."
-        hint += " Or pass --model for a different provider."
-        print(hint, file=sys.stderr)
+        # Use actionable error with provider-specific instructions
+        error = make_api_key_missing_error(provider)
+        # Add suggestion to use a different provider
+        error.suggestions.append("Or use --model to switch to a different provider")
+        error.context["model"] = model if isinstance(model, str) else "default"
+        render_error(error)
         return EXIT_ERROR
 
     agent = KaiAgent(
@@ -1394,8 +1446,40 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
             return EXIT_ERROR
-        # Text mode: print a concise error.
-        print(f"Error: {e}", file=sys.stderr)
+        # Text mode: use actionable error
+        error_str = str(e).lower()
+        suggestions = [
+            "Check your prompt and try again",
+            "Verify your API credentials are valid",
+        ]
+        # Add context-specific suggestions based on error content
+        if "api" in error_str or "key" in error_str or "auth" in error_str:
+            suggestions.append("Your API key may be invalid or expired")
+            provider_info = PROVIDER_API_KEY_INSTRUCTIONS.get(provider, {})
+            if provider_info.get("url"):
+                suggestions.append(f"Get a new key at: {provider_info['url']}")
+        if "rate" in error_str or "limit" in error_str:
+            suggestions.append("You may have hit rate limits - try again later")
+        if "timeout" in error_str or "connection" in error_str:
+            suggestions.append("Check your internet connection")
+
+        error = ActionableError(
+            error_type=ErrorType.COMMAND_EXECUTION_ERROR,
+            message=f"Agent execution failed: {e}",
+            suggestions=suggestions,
+            recovery_commands=[
+                "# Retry the command",
+                "kai --help",
+            ],
+            severity="error",
+            context={
+                "command": "run",
+                "model": model if isinstance(model, str) else "default",
+                "provider": provider,
+                "error_type": type(e).__name__,
+            },
+        )
+        render_error(error)
         if include_tb:
             print(traceback.format_exc(), file=sys.stderr)
         return EXIT_ERROR
@@ -1568,9 +1652,24 @@ def _resume_main(argv: list[str]) -> int:
     permissions = _build_permissions_from_settings(settings)
     mode_res = resolve_permission_mode(mode=permission_mode, base_permissions=permissions)
     if mode_res.yolo:
-        raise SystemExit(
-            "Error: kai resume requires a permission mode that enables HITL (default or acceptEdits)."
+        error = ActionableError(
+            error_type=ErrorType.PERMISSION_DENIED,
+            message="Resume requires a permission mode that enables human-in-the-loop (HITL)",
+            suggestions=[
+                "Use --permission-mode default for HITL with all tool confirmations",
+                "Use --permission-mode acceptEdits for HITL with edit-only confirmations",
+                "Remove --yolo or --permission-mode bypassPermissions flag",
+            ],
+            recovery_commands=[
+                "kai resume --approve --permission-mode default",
+                "kai resume --approve --permission-mode acceptEdits",
+            ],
+            context={
+                "current_mode": permission_mode,
+            },
         )
+        render_error(error)
+        raise SystemExit(EXIT_ERROR)
 
     # Build decisions payload
     decisions: list[dict[str, Any]]
@@ -1581,18 +1680,92 @@ def _resume_main(argv: list[str]) -> int:
     elif args.edit:
         try:
             edited_action = json.loads(args.edit)
-        except Exception:
-            raise SystemExit("Error: --edit must be a JSON object")
+        except Exception as parse_err:
+            error = ActionableError(
+                error_type=ErrorType.VALIDATION_ERROR,
+                message=f"Invalid JSON for --edit: {parse_err}",
+                suggestions=[
+                    "Provide valid JSON for the --edit argument",
+                    "Use proper JSON escaping for special characters",
+                    'Wrap the JSON in single quotes to avoid shell interpretation',
+                ],
+                recovery_commands=[
+                    "# Example:",
+                    """kai resume --edit '{"key": "value"}'""",
+                ],
+                context={
+                    "argument": "--edit",
+                    "expected": "JSON object",
+                },
+            )
+            render_error(error)
+            raise SystemExit(EXIT_ERROR)
         if not isinstance(edited_action, dict):
-            raise SystemExit("Error: --edit must be a JSON object")
+            error = ActionableError(
+                error_type=ErrorType.VALIDATION_ERROR,
+                message="--edit must be a JSON object, not an array or primitive",
+                suggestions=[
+                    "Provide a JSON object (starts with { and ends with })",
+                    "Example: {\"tool\": \"bash\", \"args\": {...}}",
+                ],
+                recovery_commands=[
+                    "# Example:",
+                    """kai resume --edit '{"tool": "bash", "args": {"command": "ls"}}'""",
+                ],
+                context={
+                    "argument": "--edit",
+                    "expected": "JSON object",
+                    "received": type(edited_action).__name__,
+                },
+            )
+            render_error(error)
+            raise SystemExit(EXIT_ERROR)
         decisions = [{"type": "edit", "edited_action": edited_action}]
     else:
         try:
             parsed = json.loads(args.decisions_json)
-        except Exception:
-            raise SystemExit("Error: --decisions-json must be a JSON array")
+        except Exception as parse_err:
+            error = ActionableError(
+                error_type=ErrorType.VALIDATION_ERROR,
+                message=f"Invalid JSON for --decisions-json: {parse_err}",
+                suggestions=[
+                    "Provide valid JSON for the --decisions-json argument",
+                    "The value must be a JSON array of decision objects",
+                    'Wrap the JSON in single quotes to avoid shell interpretation',
+                ],
+                recovery_commands=[
+                    "# Example:",
+                    """kai resume --decisions-json '[{"type": "approve"}]'""",
+                ],
+                context={
+                    "argument": "--decisions-json",
+                    "expected": "JSON array",
+                },
+            )
+            render_error(error)
+            raise SystemExit(EXIT_ERROR)
         if not isinstance(parsed, list) or not all(isinstance(x, dict) for x in parsed):
-            raise SystemExit("Error: --decisions-json must be a JSON array of objects")
+            error = ActionableError(
+                error_type=ErrorType.VALIDATION_ERROR,
+                message="--decisions-json must be a JSON array of objects",
+                suggestions=[
+                    "Provide a JSON array (starts with [ and ends with ])",
+                    "Each element must be a decision object with a 'type' field",
+                    "Valid types: 'approve', 'reject', 'edit'",
+                ],
+                recovery_commands=[
+                    "# Examples:",
+                    """kai resume --decisions-json '[{"type": "approve"}]'""",
+                    """kai resume --decisions-json '[{"type": "reject"}]'""",
+                ],
+                context={
+                    "argument": "--decisions-json",
+                    "expected": "JSON array of objects",
+                    "received": "array" if isinstance(parsed, list) else type(parsed).__name__,
+                },
+            )
+            render_error(error)
+            raise SystemExit(EXIT_ERROR)
         decisions = parsed
 
     if args.dry_run:
@@ -1650,9 +1823,12 @@ def _resume_main(argv: list[str]) -> int:
     provider = _provider_from_model(model)
     required_vars = _credentials_env_vars(provider)
     if required_vars and not _has_any_env(required_vars):
-        hint = f"Missing credentials for provider '{provider}'. Set one of: {', '.join(required_vars)}."
-        hint += " Or pass --model for a different provider."
-        print(hint, file=sys.stderr)
+        # Use actionable error with provider-specific instructions
+        error = make_api_key_missing_error(provider)
+        # Add suggestion to use a different provider
+        error.suggestions.append("Or use --model to switch to a different provider")
+        error.context["model"] = model if isinstance(model, str) else "default"
+        render_error(error)
         return EXIT_ERROR
 
     agent = KaiAgent(
@@ -1693,7 +1869,44 @@ def _resume_main(argv: list[str]) -> int:
                 )
             )
             return EXIT_ERROR
-        print(f"Error: {e}", file=sys.stderr)
+        # Text mode: use actionable error
+        error_str = str(e).lower()
+        suggestions = [
+            "Check that the session state file exists and is valid",
+            "Verify your API credentials are still valid",
+        ]
+        # Add context-specific suggestions based on error content
+        if "state" in error_str or "session" in error_str or "not found" in error_str:
+            suggestions.append("The session may have been corrupted or deleted")
+            suggestions.append("Try starting a new session instead")
+        if "interrupt" in error_str or "pending" in error_str:
+            suggestions.append("There may be no pending tool call to resume")
+        if "api" in error_str or "key" in error_str or "auth" in error_str:
+            suggestions.append("Your API key may be invalid or expired")
+            provider_info = PROVIDER_API_KEY_INSTRUCTIONS.get(provider, {})
+            if provider_info.get("url"):
+                suggestions.append(f"Get a new key at: {provider_info['url']}")
+
+        error = ActionableError(
+            error_type=ErrorType.SESSION_ERROR,
+            message=f"Resume failed: {e}",
+            suggestions=suggestions,
+            recovery_commands=[
+                "# Start a new session:",
+                'kai -p "Your prompt here"',
+                "# Or check session state:",
+                f"cat {state_path}",
+            ],
+            severity="error",
+            context={
+                "command": "resume",
+                "model": model if isinstance(model, str) else "default",
+                "provider": provider,
+                "state_path": str(state_path),
+                "error_type": type(e).__name__,
+            },
+        )
+        render_error(error)
         if include_tb:
             print(traceback.format_exc(), file=sys.stderr)
         return EXIT_ERROR
