@@ -56,6 +56,93 @@ COMMANDS = {
     "exit": "Exit the CLI",
 }
 
+# Keyboard shortcuts registry for toolbar display and discoverability
+# Each shortcut has:
+#   - key: The key combination (e.g., "Ctrl+E")
+#   - description: Full description for help text
+#   - display: Short text for toolbar display (e.g., "editor")
+#   - context: When to show in toolbar ("always", "has_input", "multi_line", "editing", "completion_active")
+#   - priority: Display priority (1=highest, 10=lowest) - higher priority shown first when space is limited
+KEYBOARD_SHORTCUTS = {
+    "ctrl_e": {
+        "key": "Ctrl+E",
+        "description": "Open current input in external editor (nano by default)",
+        "display": "editor",
+        "context": "always",
+        "priority": 3,
+    },
+    "ctrl_t": {
+        "key": "Ctrl+T",
+        "description": "Toggle auto-approve mode for tool execution",
+        "display": "toggle approve",
+        "context": "always",
+        "priority": 1,
+    },
+    "ctrl_b": {
+        "key": "Ctrl+B",
+        "description": "Run current input as a background task",
+        "display": "background",
+        "context": "always",
+        "priority": 2,
+    },
+    "double_esc": {
+        "key": "ESC ESC",
+        "description": "Cancel current input and clear the buffer",
+        "display": "cancel",
+        "context": "has_input",
+        "priority": 4,
+    },
+    "alt_enter": {
+        "key": "Alt+Enter",
+        "description": "Insert newline for multi-line input (ESC then Enter, or Option+Enter on Mac)",
+        "display": "newline",
+        "context": "always",
+        "priority": 5,
+    },
+    "enter": {
+        "key": "Enter",
+        "description": "Submit the current input",
+        "display": "submit",
+        "context": "has_input",
+        "priority": 1,
+    },
+    "ctrl_c": {
+        "key": "Ctrl+C",
+        "description": "Cancel input or interrupt the agent (double-press to exit)",
+        "display": "interrupt",
+        "context": "always",
+        "priority": 6,
+    },
+    "at_mention": {
+        "key": "@",
+        "description": "Type @ followed by path to auto-complete and inject file content",
+        "display": "files",
+        "context": "always",
+        "priority": 7,
+    },
+    "slash_command": {
+        "key": "/",
+        "description": "Type / at start to access commands like /help, /model, /tasks",
+        "display": "commands",
+        "context": "always",
+        "priority": 8,
+    },
+    "arrow_keys": {
+        "key": "↑↓←→",
+        "description": "Navigate within the input buffer",
+        "display": "navigate",
+        "context": "has_input",
+        "priority": 10,
+    },
+    "ctrl_j": {
+        "key": "Ctrl+J",
+        "description": "Insert newline (alternative to Alt+Enter)",
+        "display": "newline",
+        "context": "multi_line",
+        "priority": 9,
+    },
+}
+
 # Maximum argument length for display
 MAX_ARG_LENGTH = 150
 
