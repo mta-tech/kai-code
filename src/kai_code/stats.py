@@ -26,6 +26,12 @@ class RunStats:
     cached_input_tokens: int | None = None
     reasoning_tokens: int | None = None
 
+    # Timing and interaction metrics
+    ttft_ms: int | None = None  # Time to first token
+    message_count: int = 0
+    turn_count: int = 0
+    step_count: int = 0
+
     @property
     def duration_ms(self) -> int:
         return max(0, self.ended_ms - self.started_ms)
