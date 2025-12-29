@@ -679,3 +679,236 @@ def _get_conversion_tools(
         tools.append("in2csv file.json > file.csv")
 
     return tools
+
+
+# =============================================================================
+# Command Error Builder Functions
+# =============================================================================
+
+
+def make_unknown_command_error(
+    cmd: str,
+    available_commands: Sequence[str],
+    n: int = DEFAULT_MAX_SUGGESTIONS,
+    cutoff: float = DEFAULT_SIMILARITY_THRESHOLD,
+) -> ActionableError:
+    """Create an ActionableError for an unknown command error.
+
+    This function builds an error message with similar command suggestions
+    based on fuzzy matching against available commands.
+
+    Args:
+        cmd: The command that was not recognized.
+        available_commands: List of valid commands to search through.
+        n: Maximum number of similar commands to suggest. Defaults to 3.
+        cutoff: Similarity threshold (0.0 to 1.0). Defaults to 0.6.
+
+    Returns:
+        An ActionableError with suggestions for similar commands and
+        a list of available commands.
+
+    Example:
+        >>> error = make_unknown_command_error("/healp", ["/help", "/clear", "/quit"])
+        >>> error.error_type
+        <ErrorType.COMMAND_NOT_FOUND: 'command_not_found'>
+        >>> "/help" in error.related_items
+        True
+    """
+    cmd_str = cmd.strip()
+
+    # Find similar commands
+    similar = suggest_commands(cmd_str, available_commands, n=n, cutoff=cutoff)
+
+    # Build suggestions
+    suggestions = [
+        "Check if the command is spelled correctly",
+        "Use '/help' or '--help' to see available commands",
+    ]
+
+    # Mention if it looks like a typo of a common command
+    if similar:
+        if len(similar) == 1:
+            suggestions.insert(0, f"Did you mean '{similar[0]}'?")
+        else:
+            suggestions.insert(0, f"Similar commands: {', '.join(similar)}")
+
+    # Build recovery commands
+    recovery_commands = [
+        "/help",
+    ]
+
+    # If available commands is small enough, show them
+    if len(available_commands) <= 10:
+        # Show available commands as a suggestion
+        suggestions.append(
+            f"Available commands: {', '.join(sorted(available_commands))}"
+        )
+
+    return ActionableError(
+        error_type=ErrorType.COMMAND_NOT_FOUND,
+        message=f"Unknown command: '{cmd_str}'",
+        suggestions=suggestions,
+        recovery_commands=recovery_commands,
+        related_items=similar,
+        context={
+            "command": cmd_str,
+            "available_count": str(len(available_commands)),
+        },
+    )
+
+
+def make_invalid_flag_error(
+    flag: str,
+    valid_flags: Sequence[str],
+    command: str | None = None,
+    n: int = DEFAULT_MAX_SUGGESTIONS,
+    cutoff: float = DEFAULT_SIMILARITY_THRESHOLD,
+) -> ActionableError:
+    """Create an ActionableError for an invalid flag error.
+
+    This function builds an error message with similar flag suggestions
+    based on fuzzy matching against valid flags.
+
+    Args:
+        flag: The flag that was not recognized.
+        valid_flags: List of valid flags for the command.
+        command: The command the flag was used with (optional, for context).
+        n: Maximum number of similar flags to suggest. Defaults to 3.
+        cutoff: Similarity threshold (0.0 to 1.0). Defaults to 0.6.
+
+    Returns:
+        An ActionableError with suggestions for similar flags and
+        usage help.
+
+    Example:
+        >>> error = make_invalid_flag_error("--versboe", ["--help", "--verbose", "--quiet"])
+        >>> error.error_type
+        <ErrorType.INVALID_FLAG: 'invalid_flag'>
+        >>> "--verbose" in error.related_items
+        True
+    """
+    flag_str = flag.strip()
+
+    # Find similar flags
+    similar = suggest_flags(flag_str, valid_flags, n=n, cutoff=cutoff)
+
+    # Build the main message
+    if command:
+        message = f"Invalid flag '{flag_str}' for command '{command}'"
+    else:
+        message = f"Invalid flag: '{flag_str}'"
+
+    # Build suggestions
+    suggestions = [
+        "Check if the flag is spelled correctly",
+        "Flags are case-sensitive",
+    ]
+
+    # Mention if it looks like a typo of a known flag
+    if similar:
+        if len(similar) == 1:
+            suggestions.insert(0, f"Did you mean '{similar[0]}'?")
+        else:
+            suggestions.insert(0, f"Similar flags: {', '.join(similar)}")
+
+    # Build recovery commands
+    recovery_commands = []
+    if command:
+        recovery_commands.append(f"{command} --help")
+    else:
+        recovery_commands.append("--help")
+
+    # Show valid flags if not too many
+    if len(valid_flags) <= 10:
+        # Format flags nicely for display
+        formatted_flags = ", ".join(sorted(valid_flags))
+        suggestions.append(f"Valid flags: {formatted_flags}")
+    elif len(valid_flags) > 0:
+        suggestions.append(f"Use --help to see all {len(valid_flags)} available flags")
+
+    # Build context
+    context = {
+        "flag": flag_str,
+        "valid_flags_count": str(len(valid_flags)),
+    }
+    if command:
+        context["command"] = command
+
+    return ActionableError(
+        error_type=ErrorType.INVALID_FLAG,
+        message=message,
+        suggestions=suggestions,
+        recovery_commands=recovery_commands,
+        related_items=similar,
+        context=context,
+    )
+
+
+def make_missing_argument_error(
+    command: str,
+    missing_arg: str,
+    expected_type: str | None = None,
+    usage_example: str | None = None,
+) -> ActionableError:
+    """Create an ActionableError for a missing required argument error.
+
+    This function builds an error message indicating a required argument
+    is missing, with usage examples and suggestions.
+
+    Args:
+        command: The command that requires the argument.
+        missing_arg: The name of the missing argument.
+        expected_type: Optional description of what type/format is expected
+            (e.g., "file path", "integer", "model name").
+        usage_example: Optional example of correct usage.
+
+    Returns:
+        An ActionableError with usage instructions and suggestions.
+
+    Example:
+        >>> error = make_missing_argument_error("/model", "model_name", expected_type="model identifier")
+        >>> error.error_type
+        <ErrorType.MISSING_ARGUMENT: 'missing_argument'>
+        >>> "model_name" in error.message
+        True
+    """
+    command_str = command.strip()
+    arg_str = missing_arg.strip()
+
+    # Build the main message
+    message = f"Missing required argument '{arg_str}' for command '{command_str}'"
+
+    # Build suggestions
+    suggestions = [
+        f"Provide the required '{arg_str}' argument",
+    ]
+
+    if expected_type:
+        suggestions.append(f"Expected: {expected_type}")
+
+    suggestions.append("Check the command syntax and try again")
+
+    # Build recovery commands with help
+    recovery_commands = [
+        f"{command_str} --help",
+    ]
+
+    # Add usage example if provided
+    if usage_example:
+        recovery_commands.insert(0, f"# Example: {usage_example}")
+
+    # Build context
+    context = {
+        "command": command_str,
+        "missing_argument": arg_str,
+    }
+    if expected_type:
+        context["expected_type"] = expected_type
+
+    return ActionableError(
+        error_type=ErrorType.MISSING_ARGUMENT,
+        message=message,
+        suggestions=suggestions,
+        recovery_commands=recovery_commands,
+        context=context,
+    )
