@@ -1,0 +1,25 @@
+{
+  "active": true,
+  "spec": "004-add-task-priority-and-queueing-to-taskmanager",
+  "state": "building",
+  "subtasks": {
+    "completed": 2,
+    "total": 19,
+    "in_progress": 1,
+    "failed": 0
+  },
+  "phase": {
+    "current": "Core Priority System",
+    "id": null,
+    "total": 4
+  },
+  "workers": {
+    "active": 0,
+    "max": 1
+  },
+  "session": {
+    "number": 4,
+    "started_at": "2025-12-29T22:44:25.902029"
+  },
+  "last_update": "2025-12-29T22:59:00.072472"
+}

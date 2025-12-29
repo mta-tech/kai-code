@@ -1,0 +1,15 @@
+{
+  "discovered_files": {
+    "src/kai_code/tasks/": {
+      "description": "Tasks module contains TaskManager singleton, Task/BackgroundShellTask/BackgroundAgentTask dataclasses, Rich panel UI, and LangChain tools. Uses threading for background execution with MAX_CONCURRENT_TASKS=5 limit and callback system for task completion.",
+      "category": "architecture",
+      "discovered_at": "2025-12-29T15:50:19.316687+00:00"
+    },
+    "src/kai_code/tasks/task.py": {
+      "description": "TaskStatus.QUEUED added for tasks waiting in priority queue. display_status returns \"\u23f3 queued\" for this status.",
+      "category": "enum",
+      "discovered_at": "2025-12-29T15:58:22.138921+00:00"
+    }
+  },
+  "last_updated": "2025-12-29T15:58:22.138942+00:00"
+}
