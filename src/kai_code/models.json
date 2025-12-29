@@ -1,47 +1,58 @@
 [
   {
     "id": "sonnet-4",
-    "handle": "anthropic:claude-sonnet-4-20250514"
+    "handle": "anthropic:claude-sonnet-4-20250514",
+    "context_window": 200000
   },
   {
     "id": "sonnet-4.5",
-    "handle": "anthropic:claude-sonnet-4-5-20250929"
+    "handle": "anthropic:claude-sonnet-4-5-20250929",
+    "context_window": 200000
   },
   {
     "id": "opus-4",
-    "handle": "anthropic:claude-opus-4-20250514"
+    "handle": "anthropic:claude-opus-4-20250514",
+    "context_window": 200000
   },
   {
     "id": "haiku-3.5",
-    "handle": "anthropic:claude-3-5-haiku-20241022"
+    "handle": "anthropic:claude-3-5-haiku-20241022",
+    "context_window": 200000
   },
   {
     "id": "gpt-4o",
-    "handle": "openai:gpt-4o"
+    "handle": "openai:gpt-4o",
+    "context_window": 128000
   },
   {
     "id": "gpt-4o-mini",
-    "handle": "openai:gpt-4o-mini"
+    "handle": "openai:gpt-4o-mini",
+    "context_window": 128000
   },
   {
     "id": "o1",
-    "handle": "openai:o1"
+    "handle": "openai:o1",
+    "context_window": 200000
   },
   {
     "id": "o3-mini",
-    "handle": "openai:o3-mini"
+    "handle": "openai:o3-mini",
+    "context_window": 200000
   },
   {
     "id": "gemini-2.0-flash",
     "handle": "google_genai:gemini-2.0-flash",
-    "is_default": true
+    "is_default": true,
+    "context_window": 1048576
   },
   {
     "id": "gemini-2.5-pro",
-    "handle": "google_genai:gemini-2.5-pro-preview-06-05"
+    "handle": "google_genai:gemini-2.5-pro-preview-06-05",
+    "context_window": 1048576
   },
   {
     "id": "gemini-2.5-flash",
-    "handle": "google_genai:gemini-2.5-flash-preview-05-20"
+    "handle": "google_genai:gemini-2.5-flash-preview-05-20",
+    "context_window": 1048576
   }
 ]

@@ -7,7 +7,7 @@ import json
 import re
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from rich import box
 from rich.markup import escape
@@ -176,10 +176,143 @@ def format_tool_message_content(content: Any) -> str:
 class TokenTracker:
     """Track token usage across the conversation."""
 
+    # Threshold constants for context limit warnings
+    WARNING_THRESHOLD = 0.80  # 80% - show warning
+    CRITICAL_THRESHOLD = 0.95  # 95% - show critical warning
+
     def __init__(self) -> None:
         self.baseline_context = 0  # Baseline system context (system + agent.md + tools)
         self.current_context = 0  # Total context including messages
         self.last_output = 0
+        self._context_limit: int | None = None  # Maximum context window size
+        self._warned_80: bool = False  # Track if 80% warning has been shown
+        self._warned_95: bool = False  # Track if 95% warning has been shown
+
+    @property
+    def context_limit(self) -> int | None:
+        """Get the context limit for the current model."""
+        return self._context_limit
+
+    def set_context_limit(self, limit: int) -> None:
+        """Set the context limit for the current model.
+
+        Args:
+            limit: The maximum context window size in tokens
+        """
+        self._context_limit = limit
+
+    def get_usage_percentage(self) -> float | None:
+        """Get the current context usage as a percentage.
+
+        Returns:
+            The usage percentage (0.0 to 1.0+) or None if no context limit is set
+        """
+        if self._context_limit is None or self._context_limit <= 0:
+            return None
+        return self.current_context / self._context_limit
+
+    def get_status_level(self) -> Literal["normal", "warning", "critical", "unknown"]:
+        """Get the current status level based on context usage.
+
+        Returns:
+            'unknown' - No context limit set
+            'normal' - Usage < 80% (WARNING_THRESHOLD)
+            'warning' - Usage >= 80% and < 95% (CRITICAL_THRESHOLD)
+            'critical' - Usage >= 95%
+        """
+        percentage = self.get_usage_percentage()
+        if percentage is None:
+            return "unknown"
+        if percentage >= self.CRITICAL_THRESHOLD:
+            return "critical"
+        if percentage >= self.WARNING_THRESHOLD:
+            return "warning"
+        return "normal"
+
+    def should_show_warning(self) -> Literal["warning", "critical"] | None:
+        """Check if a threshold warning should be shown.
+
+        Returns the warning level if a threshold was just crossed for the first time,
+        or None if no warning should be shown. Automatically marks the warning as shown.
+
+        Returns:
+            'warning' - First time crossing 80% threshold
+            'critical' - First time crossing 95% threshold
+            None - No new warning to show (either below thresholds or already warned)
+        """
+        percentage = self.get_usage_percentage()
+        if percentage is None:
+            return None
+
+        # Check critical threshold first (95%)
+        if percentage >= self.CRITICAL_THRESHOLD and not self._warned_95:
+            self._warned_95 = True
+            return "critical"
+
+        # Check warning threshold (80%)
+        if percentage >= self.WARNING_THRESHOLD and not self._warned_80:
+            self._warned_80 = True
+            return "warning"
+
+        return None
+
+    def _format_tokens_compact(self, tokens: int) -> str:
+        """Format token count in compact K/M notation.
+
+        Args:
+            tokens: Token count to format
+
+        Returns:
+            Formatted string like '45K', '1.2M', '200K'
+        """
+        if tokens >= 1_000_000:
+            # For millions, show 1 decimal place if not whole number
+            value = tokens / 1_000_000
+            if value == int(value):
+                return f"{int(value)}M"
+            return f"{value:.1f}M"
+        elif tokens >= 1_000:
+            # For thousands, show 1 decimal place if < 10K, otherwise whole number
+            value = tokens / 1_000
+            if value < 10 and value != int(value):
+                return f"{value:.1f}K"
+            return f"{int(value)}K"
+        else:
+            return str(tokens)
+
+    def format_compact_display(self) -> str:
+        """Format current token usage as a compact display string.
+
+        Returns formatted strings based on context status:
+        - Normal: '45K/200K [23%]'
+        - Warning: '160K/200K ⚠️ 80%'
+        - Critical: '190K/200K 🚨 95%'
+        - Unknown (no limit): '45K tokens'
+
+        Returns:
+            Compact formatted string for status bar display
+        """
+        current = self._format_tokens_compact(self.current_context)
+
+        if self._context_limit is None:
+            # No limit set - just show current tokens
+            return f"{current} tokens"
+
+        limit = self._format_tokens_compact(self._context_limit)
+        percentage = self.get_usage_percentage()
+        status = self.get_status_level()
+
+        if percentage is None:
+            return f"{current}/{limit}"
+
+        percent_int = int(percentage * 100)
+
+        if status == "critical":
+            return f"{current}/{limit} 🚨 {percent_int}%"
+        elif status == "warning":
+            return f"{current}/{limit} ⚠️ {percent_int}%"
+        else:
+            return f"{current}/{limit} [{percent_int}%]"
 
     def set_baseline(self, tokens: int) -> None:
         """Set the baseline context token count.
@@ -194,6 +327,8 @@ class TokenTracker:
         """Reset to baseline (for /clear command)."""
         self.current_context = self.baseline_context
         self.last_output = 0
+        self._warned_80 = False
+        self._warned_95 = False
 
     def add(self, input_tokens: int, output_tokens: int) -> None:
         """Add tokens from a response."""

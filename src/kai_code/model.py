@@ -8,6 +8,10 @@ from importlib import resources
 from typing import Callable
 
 
+# Default context window size (128K tokens) when model limit is unknown
+DEFAULT_CONTEXT_WINDOW = 128000
+
+
 @dataclass(frozen=True)
 class ModelInfo:
     """Minimal model metadata (TS parity: models.json in letta-code)."""
@@ -17,6 +21,7 @@ class ModelInfo:
     provider: str = ""
     is_default: bool = False
     update_args: dict | None = None
+    context_window: int | None = None
 
 
 def _load_models_json() -> list[ModelInfo] | None:
@@ -35,6 +40,7 @@ def _load_models_json() -> list[ModelInfo] | None:
             if not isinstance(mid, str) or not isinstance(handle, str):
                 continue
             provider = handle.split(":")[0] if ":" in handle else ""
+            context_window = item.get("context_window")
             out.append(
                 ModelInfo(
                     id=mid,
@@ -42,6 +48,7 @@ def _load_models_json() -> list[ModelInfo] | None:
                     provider=provider,
                     is_default=bool(item.get("is_default", False)),
                     update_args=item.get("update_args") if isinstance(item.get("update_args"), dict) else None,
+                    context_window=context_window if isinstance(context_window, int) else None,
                 )
             )
         return out or None
@@ -189,9 +196,9 @@ _MODELS_CACHE_TTL: float = 300  # 5 minutes
 
 # Static fallback models
 _STATIC_MODELS: list[ModelInfo] = _load_models_json() or [
-    ModelInfo(id="sonnet-4.5", handle="anthropic:claude-sonnet-4-5-20250929", provider="anthropic"),
-    ModelInfo(id="gpt-4o", handle="openai:gpt-4o", provider="openai"),
-    ModelInfo(id="gemini-2.0-flash", handle="google_genai:gemini-2.0-flash", provider="google_genai", is_default=True),
+    ModelInfo(id="sonnet-4.5", handle="anthropic:claude-sonnet-4-5-20250929", provider="anthropic", context_window=200000),
+    ModelInfo(id="gpt-4o", handle="openai:gpt-4o", provider="openai", context_window=128000),
+    ModelInfo(id="gemini-2.0-flash", handle="google_genai:gemini-2.0-flash", provider="google_genai", is_default=True, context_window=1048576),
 ]
 
 
@@ -219,6 +226,7 @@ def _refresh_models_cache() -> None:
                         provider=m.provider,
                         is_default=True,
                         update_args=m.update_args,
+                        context_window=m.context_window,
                     )
                     has_default = True
                     break
@@ -230,6 +238,7 @@ def _refresh_models_cache() -> None:
                     provider=m.provider,
                     is_default=True,
                     update_args=m.update_args,
+                    context_window=m.context_window,
                 )
 
         _MODELS_CACHE = all_models
@@ -321,6 +330,21 @@ def get_model_update_args(model_identifier: str | None = None) -> dict | None:
     return info.update_args if info else None
 
 
+def get_context_limit(model_identifier: str) -> int:
+    """Get the context window limit for a model.
+
+    Args:
+        model_identifier: Model ID or handle (e.g., "sonnet-4.5" or "anthropic:claude-sonnet-4-5-20250929")
+
+    Returns:
+        Context window size in tokens. Returns DEFAULT_CONTEXT_WINDOW (128K) if unknown.
+    """
+    info = get_model_info(model_identifier)
+    if info and info.context_window:
+        return info.context_window
+    return DEFAULT_CONTEXT_WINDOW
+
+
 def refresh_models() -> list[ModelInfo]:
     """Force refresh models from APIs."""
     return models(force_refresh=True)
@@ -332,3 +356,4 @@ getDefaultModel = get_default_model
 formatAvailableModels = format_available_models
 getModelInfo = get_model_info
 getModelUpdateArgs = get_model_update_args
+getContextLimit = get_context_limit
