@@ -54,3 +54,9 @@ logs/
 # Temporary files
 *.tmp
 *.temp
+
+# Worktrees and auto-claude metadata
+.worktrees/
+.auto-claude/
+.auto-claude-status
+.claude_settings.json
