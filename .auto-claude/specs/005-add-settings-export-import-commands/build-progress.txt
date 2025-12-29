@@ -1,0 +1,54 @@
+# Build Progress: Add Settings Export/Import Commands
+
+## Status: PLANNING COMPLETE
+Last Updated: 2025-12-29
+
+---
+
+## Implementation Plan Summary
+
+### Phase 1: Core Export/Import Functions (settings.py)
+- [ ] 1.1 Add export_settings function
+- [ ] 1.2 Add settings_to_dict helper
+- [ ] 1.3 Add import_settings function
+- [ ] 1.4 Add validate_settings_dict helper
+
+### Phase 2: Slash Command Handlers (rich_commands.py)
+- [ ] 2.1 Add /export-settings command handler
+- [ ] 2.2 Add /import-settings command handler
+- [ ] 2.3 Register commands in handle_command function
+- [ ] 2.4 Update /help command output
+
+### Phase 3: Tests
+- [ ] 3.1 Add unit tests for settings export/import functions
+- [ ] 3.2 Add integration tests for slash commands
+
+---
+
+## Key Files Identified
+- src/kai_code/settings.py - Core settings logic with _read_json/_write_json helpers
+- src/kai_code/rich_commands.py - Slash command handling in handle_command()
+- src/kai_code/cli_ui.py - Help text and UI utilities
+
+## Patterns to Follow
+- Use existing _read_json/_write_json for file I/O
+- Follow handle_command() routing pattern
+- Use console.print() for user feedback
+- Use dataclasses.asdict() for KaiSettings serialization
+
+## Design Decisions
+- Session-specific fields (last_session, agents) NOT exported/imported
+- Import merges with existing settings (doesn't clobber)
+- Support both snake_case and camelCase keys
+- Default export filename: kai-settings.json
+- Default import target: project (.kai/settings.json)
+
+---
+
+## Progress Log
+
+### 2025-12-29 - Planning
+- Read spec.md requirements
+- Explored codebase to understand patterns
+- Created detailed implementation_plan.json with 3 phases and 10 subtasks
+- Identified key files and patterns to follow

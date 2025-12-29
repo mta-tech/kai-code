@@ -208,3 +208,50 @@ def load_global_last_session() -> str | None:
     data = _read_json(global_settings_path())
     v = data.get("last_session")
     return v if isinstance(v, str) and v.strip() else None
+
+
+# Fields that should not be exported (session-specific)
+_SESSION_FIELDS = {"last_session", "agents"}
+
+
+def export_settings(root_dir: Path, output_path: Path) -> tuple[bool, str]:
+    """Export merged settings to a JSON file.
+
+    Loads the merged settings from global/project/local files and writes
+    configuration settings (excluding session-specific fields) to output_path.
+
+    Args:
+        root_dir: Project root directory for loading settings.
+        output_path: Path to write the exported settings JSON file.
+
+    Returns:
+        A tuple of (success, message) indicating the result.
+    """
+    try:
+        settings = load_settings(root_dir)
+
+        # Convert settings to dict, excluding session-specific fields and None values
+        export_data: dict[str, Any] = {}
+
+        if settings.default_model is not None:
+            export_data["default_model"] = settings.default_model
+        if settings.default_toolset is not None:
+            export_data["default_toolset"] = settings.default_toolset
+        if settings.permission_mode is not None:
+            export_data["permission_mode"] = settings.permission_mode
+        if settings.allowed_tools is not None:
+            export_data["allowed_tools"] = settings.allowed_tools
+        if settings.disallowed_tools is not None:
+            export_data["disallowed_tools"] = settings.disallowed_tools
+        if settings.allowed_commands is not None:
+            export_data["allowed_commands"] = settings.allowed_commands
+        if settings.disallowed_commands is not None:
+            export_data["disallowed_commands"] = settings.disallowed_commands
+
+        _write_json(output_path, export_data)
+
+        field_count = len(export_data)
+        return True, f"Exported {field_count} setting(s) to {output_path}"
+
+    except Exception as e:
+        return False, f"Failed to export settings: {e}"

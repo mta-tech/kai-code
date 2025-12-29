@@ -1,0 +1,25 @@
+{
+  "active": true,
+  "spec": "005-add-settings-export-import-commands",
+  "state": "building",
+  "subtasks": {
+    "completed": 0,
+    "total": 0,
+    "in_progress": 1,
+    "failed": 0
+  },
+  "phase": {
+    "current": "Core Export/Import Functions",
+    "id": null,
+    "total": 4
+  },
+  "workers": {
+    "active": 0,
+    "max": 1
+  },
+  "session": {
+    "number": 2,
+    "started_at": "2025-12-29T22:44:26.093439"
+  },
+  "last_update": "2025-12-29T22:50:07.589798"
+}
