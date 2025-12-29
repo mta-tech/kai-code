@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -10,6 +10,14 @@ class RunStats:
     ended_ms: int
     chunk_count: int = 0
     interrupted: bool = False
+
+    # Tool usage metrics
+    tool_call_count: int = 0
+    tool_result_count: int = 0
+    tool_error_count: int = 0
+    tool_names: dict[str, int] = field(default_factory=dict)
+    tool_latency_total_ms: int = 0
+    tool_latency_max_ms: int = 0
 
     @property
     def duration_ms(self) -> int:
