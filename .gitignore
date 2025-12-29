@@ -1,0 +1,56 @@
+# Virtual environments
+.venv/
+.venv_test_install/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Test/lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Kai Code session data
+.kai/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Environment files (keep .env.example)
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+
+# Database files (for dbt development)
+*.duckdb
+*.parquet
+
+# Claude/AI assistant files
+.claude/
+
+# Temporary files
+*.tmp
+*.temp

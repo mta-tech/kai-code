@@ -79,7 +79,7 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         "-i",
         "--interactive",
         action="store_true",
-        help="Launch Textual TUI mode instead of Rich CLI",
+        help="Launch interactive CLI mode (default behavior)",
     )
 
     parser.add_argument(
@@ -494,11 +494,8 @@ def main(args: list[str] | None = None) -> int:
         show_interactive_help()
         return 0
 
-    # Handle --interactive (TUI mode)
-    if parsed.interactive:
-        from kai_code.tui import run_tui
-
-        return run_tui()
+    # Handle --interactive (now just runs the Rich CLI)
+    # Note: Textual TUI has been removed, using Rich CLI instead
 
     # Create session state
     session_state = SessionState(

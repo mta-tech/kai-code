@@ -8,6 +8,7 @@ from kai_code.agent import KaiAgent
 from kai_code.agents.dbt.adapters import DatabaseAdapter, get_adapter
 from kai_code.agents.dbt.tools.dbt_cli_tools import create_dbt_cli_tools
 from kai_code.agents.dbt.tools.schema_tools import create_schema_tools
+from kai_code.prompts import load_prompt
 
 
 class DbtAgent(KaiAgent):
@@ -56,11 +57,10 @@ class DbtAgent(KaiAgent):
             state_path: Session state file path.
             **kwargs: Additional KaiAgent arguments.
         """
-        # Build enhanced system prompt with dbt context
-        dbt_prompt = self._build_dbt_system_prompt()
-        combined_prompt = (
-            f"{dbt_prompt}\n\n{system_prompt}" if system_prompt else dbt_prompt
-        )
+        # Load kai-dbt prompt (inherits from kai-code automatically)
+        # Note: KaiAgent's _build_graph will use this instead of kai-code
+        # The user's additional system_prompt is appended if provided
+        combined_prompt = system_prompt  # Just pass through; dbt prompt loaded below
 
         # Initialize parent KaiAgent
         super().__init__(
@@ -105,29 +105,9 @@ class DbtAgent(KaiAgent):
         """dbt profiles directory."""
         return self._dbt_profiles_dir
 
-    def _build_dbt_system_prompt(self) -> str:
-        """Build dbt-specific system prompt content."""
-        return """## dbt Data Engineering Agent
-
-You are a data engineer specializing in dbt. You build production-quality data pipelines.
-
-### Before Implementation
-1. Use get_database_schema() to explore available tables
-2. Read dbt_docs/ files for detailed dbt documentation
-3. Use get_instructions() if available for business rules
-
-### Layer Conventions
-- **staging/** (stg_): Views, 1:1 with source, cleaning only
-- **intermediate/** (int_): Tables, business logic, not user-facing
-- **marts/** (fct_, dim_): Tables, analytics-ready
-
-### Model Checklist
-- Config block with materialization
-- CTEs for organization
-- Explicit column selection (no SELECT *)
-- Data type casting
-- Tests in schema.yml
-"""
+    def _get_base_prompt_name(self) -> str:
+        """Use kai-dbt prompt (inherits from kai-code)."""
+        return "kai-dbt"
 
     def get_dbt_tools(self) -> list:
         """Get all dbt-specific tools.

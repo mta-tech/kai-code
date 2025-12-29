@@ -1,22 +1,28 @@
 """ASCII banner and startup info for kai-dbt CLI."""
 from __future__ import annotations
 
-# dbt-themed ASCII art banner
-DBT_ASCII_BANNER = r"""
-    ╦╔═╔═╗╦  ╔╦╗╔╗ ╔╦╗
-    ╠╩╗╠═╣║   ║║╠╩╗ ║
-    ╩ ╩╩ ╩╩  ═╩╝╚═╝ ╩
-    ┌─────────────────────┐
-    │  Data Engineering   │
-    │       Agent         │
-    └─────────────────────┘
+# dbt-themed ASCII art banner (matching kai-code block style)
+DBT_ASCII_BANNER = """
+ ██╗  ██╗  █████╗  ██╗
+ ██║ ██╔╝ ██╔══██╗ ██║
+ █████╔╝  ███████║ ██║
+ ██╔═██╗  ██╔══██║ ██║
+ ██║  ██╗ ██║  ██║ ██║
+ ╚═╝  ╚═╝ ╚═╝  ╚═╝ ╚═╝
+
+ ██████╗  ██████╗  ████████╗
+ ██╔══██╗ ██╔══██╗ ╚══██╔══╝
+ ██║  ██║ ██████╔╝    ██║
+ ██║  ██║ ██╔══██╗    ██║
+ ██████╔╝ ██████╔╝    ██║
+ ╚═════╝  ╚═════╝     ╚═╝
 """
 
 # Compact banner alternative
-DBT_ASCII_BANNER_COMPACT = r"""
-╔═══════════════════════════════╗
-║  KAI dbt  │  Data Engineer    ║
-╚═══════════════════════════════╝
+DBT_ASCII_BANNER_COMPACT = """
+ ╔═══════════════════════════════════╗
+ ║  KAI dbt  │  Data Engineering     ║
+ ╚═══════════════════════════════════╝
 """
 
 

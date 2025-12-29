@@ -1,0 +1,190 @@
+"""Agent tools for interacting with background tasks."""
+from __future__ import annotations
+
+from typing import Annotated
+
+from langchain_core.tools import tool
+
+from .manager import get_task_manager
+from .task import TaskStatus
+
+
+@tool
+def list_background_tasks() -> str:
+    """List all background tasks with their status and summary.
+
+    Use this to see what background tasks are running, completed, or failed.
+    Returns a formatted list of all tasks with their IDs, types, descriptions, and status.
+    """
+    manager = get_task_manager()
+    tasks = manager.get_all_tasks()
+
+    if not tasks:
+        return "No background tasks."
+
+    lines = []
+    active = manager.get_active_tasks()
+    completed = manager.get_completed_tasks()
+
+    lines.append(f"Background Tasks: {len(active)} active, {len(completed)} completed")
+    lines.append("")
+
+    # Format as table
+    lines.append("ID       | Type   | Status    | Description")
+    lines.append("-" * 60)
+
+    for task in tasks:
+        status_str = {
+            TaskStatus.RUNNING: "running",
+            TaskStatus.COMPLETED: "done",
+            TaskStatus.FAILED: "failed",
+            TaskStatus.KILLED: "killed",
+            TaskStatus.PENDING: "pending",
+        }.get(task.status, "?")
+
+        # Truncate description
+        desc = task.description
+        if len(desc) > 30:
+            desc = desc[:27] + "..."
+
+        lines.append(f"{task.id:<8} | {task.type:<6} | {status_str:<9} | {desc}")
+
+    return "\n".join(lines)
+
+
+@tool
+def get_task_output(task_id: Annotated[str, "The ID of the task to get output from"]) -> str:
+    """Get the full output of a background task.
+
+    Use this to see the complete output from a completed, failed, or running task.
+    The task_id can be found using list_background_tasks.
+
+    Args:
+        task_id: The ID of the task (e.g., "a1b2c3d4")
+
+    Returns:
+        The task's output, or an error message if the task was not found.
+    """
+    manager = get_task_manager()
+    task = manager.get_task(task_id)
+
+    if task is None:
+        return f"Task not found: {task_id}"
+
+    lines = []
+    lines.append(f"Task: {task.description}")
+    lines.append(f"Type: {task.type}")
+    lines.append(f"Status: {task.status.value}")
+
+    if task.duration:
+        lines.append(f"Duration: {task.duration:.1f}s")
+
+    if task.error:
+        lines.append(f"Error: {task.error}")
+
+    lines.append("")
+    lines.append("Output:")
+    lines.append("-" * 40)
+
+    if task.output:
+        # Limit output size to prevent overwhelming the context
+        output = task.output
+        if len(output) > 10000:
+            output = output[:10000] + "\n\n... (output truncated, {len(task.output) - 10000} more characters)"
+        lines.append(output)
+    else:
+        lines.append("(no output)")
+
+    return "\n".join(lines)
+
+
+@tool
+def kill_background_task(task_id: Annotated[str, "The ID of the task to kill"]) -> str:
+    """Kill a running background task.
+
+    Use this to stop a background task that is currently running.
+    The task_id can be found using list_background_tasks.
+
+    Args:
+        task_id: The ID of the task to kill (e.g., "a1b2c3d4")
+
+    Returns:
+        Success or error message.
+    """
+    manager = get_task_manager()
+    task = manager.get_task(task_id)
+
+    if task is None:
+        return f"Task not found: {task_id}"
+
+    if task.status != TaskStatus.RUNNING:
+        return f"Task is not running (status: {task.status.value})"
+
+    success = manager.kill_task(task_id)
+
+    if success:
+        return f"Task {task_id} killed successfully."
+    else:
+        return f"Failed to kill task {task_id}."
+
+
+@tool
+def run_background_shell(
+    command: Annotated[str, "The shell command to run in the background"],
+    description: Annotated[str | None, "Optional description of the task"] = None,
+) -> str:
+    """Run a shell command in the background.
+
+    Use this for long-running commands like builds, tests, or servers.
+    The task will be managed by the background task manager.
+
+    Args:
+        command: The shell command to execute.
+        description: Optional description for the task.
+
+    Returns:
+        The task ID.
+    """
+    manager = get_task_manager()
+    task_id = manager.run_shell(command)
+    if description:
+        task = manager.get_task(task_id)
+        if task:
+            task.description = description
+    return task_id
+
+
+@tool
+def run_background_agent(
+    prompt: Annotated[str, "The prompt to send to the background agent"],
+    description: Annotated[str | None, "Optional description of the task"] = None,
+) -> str:
+    """Run an agent task in the background.
+
+    Use this for complex, multi-step tasks that can run independently.
+    The task will be managed by the background task manager.
+
+    Args:
+        prompt: The prompt for the agent.
+        description: Optional description for the task.
+
+    Returns:
+        The task ID.
+    """
+    manager = get_task_manager()
+    task_id = manager.run_agent(prompt)
+    if description:
+        task = manager.get_task(task_id)
+        if task:
+            task.description = description
+    return task_id
+
+
+# Export all tools as a list for easy registration
+BACKGROUND_TASK_TOOLS = [
+    list_background_tasks,
+    get_task_output,
+    kill_background_task,
+    run_background_shell,
+    run_background_agent,
+]

@@ -809,20 +809,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "-i", "--interactive",
         action="store_true",
-        help="Launch interactive TUI mode",
+        help="Launch interactive CLI mode",
     )
-    
+
     parser.add_argument(
         "--debug-logs",
         action="store_true",
-        help="Enable debug logging for TUI (same as KAI_DEBUG=1)",
+        help="Enable debug logging (same as KAI_DEBUG=1)",
     )
 
     parser.add_argument(
         "--ui-mode",
-        choices=["textual", "rich"],
+        choices=["rich"],
         default="rich",
-        help="UI framework for interactive mode (default: rich)",
+        help="UI framework for interactive mode (Rich CLI)",
     )
 
     parser.add_argument("--root", help="Project root (defaults to cwd)")
@@ -990,10 +990,8 @@ def main(argv: list[str] | None = None) -> int:
         logger.debug(f"Interactive mode args: {args}")
         
         try:
-            if args.ui_mode == "textual":
-                from .tui.app import KaiCodeApp
-            else:
-                from .rich_ui.app import KaiRichApp as KaiCodeApp
+            # Always use Rich CLI (Textual TUI has been removed)
+            from .rich_ui.app import KaiRichApp as KaiCodeApp
 
             logger.debug("Importing KaiCodeApp")
             root_dir = _resolve_root_dir(args.root)
@@ -1308,27 +1306,14 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(payload, indent=2))
         return EXIT_SUCCESS
 
-    # Interactive TUI: if no prompt was provided and stdin is a TTY.
+    # Interactive mode: if no prompt was provided and stdin is a TTY.
+    # Note: Use kai (rich_main) for interactive mode - this is the basic CLI
     if args.output_format == "text":
         has_prompt = bool(args.prompt_text) or bool(args.prompt_args) or (not sys.stdin.isatty())
         if not has_prompt:
-            from .tui import TuiConfig, run_tui
-
-            return run_tui(
-                config=TuiConfig(
-                    mode=args.mode,
-                    root_dir=root_dir,
-                    state_path=Path(state_path),
-                    model=model,
-                    toolset=args.toolset,
-                    permission_mode=permission_mode,
-                    skills_dir=args.skills,
-                    system_prompt=resolved_system_prompt,
-                    letta_api_key=args.letta_api_key,
-                    letta_base_url=args.letta_base_url,
-                    letta_project=args.letta_project,
-                )
-            )
+            print("Interactive mode is available via 'kai' command.")
+            print("Run 'kai' for the interactive Rich CLI experience.")
+            return EXIT_SUCCESS
 
     # Only treat -p/--prompt specially; if user didn't pass -p but provided
     # positionals, we still accept them (matching letta headless behavior).

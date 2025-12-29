@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "kai-code"
 version = "0.1.0"
-description = "DeepAgents-based Python coding agent"
+description = "Local AI coding agent built on LangChain deepagents"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
@@ -15,7 +15,6 @@ dependencies = [
   "deepagents>=0.2.8",
   "langchain-google-genai>=4.1.2",
   "prompt-toolkit>=3.0.52",
-  "textual>=6.11.0",
   "rich>=13.0.0",
   "requests",
   "tavily-python",
@@ -28,18 +27,16 @@ dependencies = [
 [project.optional-dependencies]
 openai = ["langchain-openai>=0.2.0"]
 anthropic = ["langchain-anthropic>=0.2.0"]
-google_genai = ["langchain-google-genai>=2.0.0"]
+google-genai = ["langchain-google-genai>=2.0.0"]
 letta = ["letta-client>=1.0.0"]
-prompt-toolkit = ["prompt-toolkit>=3.0.0"]
-tui-textual = ["textual>=0.58.0"]
-tui-rich = ["rich>=14.0.0", "prompt-toolkit>=3.0.0"]
-tui = ["rich>=14.0.0", "prompt-toolkit>=3.0.0"]  # Default to Rich
 dbt = ["duckdb>=1.0.0", "psycopg[binary]>=3.0.0"]
 dbt-duckdb = ["duckdb>=1.0.0"]
 dbt-postgres = ["psycopg[binary]>=3.0.0"]
 
 [project.urls]
-Homepage = "https://github.com/fitrakacamarga/bmad-new"
+Homepage = "https://github.com/kai-code/kai-code"
+Documentation = "https://github.com/kai-code/kai-code#readme"
+Repository = "https://github.com/kai-code/kai-code"
 
 [project.scripts]
 kai = "kai_code.rich_main:cli_main"
