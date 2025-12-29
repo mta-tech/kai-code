@@ -32,6 +32,8 @@ from kai_code.cli_ui import TokenTracker, show_interactive_help
 from kai_code.tasks import get_task_manager
 from kai_code.model_selector import show_model_selector, get_available_models, format_current_model
 from kai_code.model import resolve_model, get_default_model
+from kai_code.errors import ActionableError, ErrorType, render_error
+from kai_code.error_suggestions import make_model_not_available_error, PROVIDER_API_KEY_INSTRUCTIONS
 
 if TYPE_CHECKING:
     from kai_code.agent import KaiAgent
@@ -338,10 +340,41 @@ async def simple_cli(
         model_display = format_current_model(current_model) or current_model
         console.print(f"[dim]Model: {model_display}[/dim]")
     except Exception as e:
-        console.print(f"[red]Error creating agent: {e}[/red]")
-        import traceback
+        # Build suggestions based on the error type
+        error_str = str(e).lower()
+        suggestions = [
+            "Check if your API key is correctly configured",
+            "Verify your internet connection",
+            "Try selecting a different model with /model",
+        ]
+        recovery_commands = ["/models"]
 
-        traceback.print_exc()
+        # Add provider-specific suggestions if this looks like an API key issue
+        if "api" in error_str or "key" in error_str or "auth" in error_str:
+            for provider, info in PROVIDER_API_KEY_INSTRUCTIONS.items():
+                if provider != "ollama" and info.get("env_var"):
+                    suggestions.append(
+                        f"Set {info['env_var']} for {info['description']} models"
+                    )
+                    recovery_commands.append(f"export {info['env_var']}=your-key-here")
+                    break
+
+        # Add model-specific suggestion if model name is in the error
+        if session_state.model:
+            suggestions.insert(0, f"Check if model '{session_state.model}' is available")
+
+        error = ActionableError(
+            error_type=ErrorType.AGENT_CREATION_ERROR,
+            message=f"Failed to create agent: {e}",
+            suggestions=suggestions,
+            recovery_commands=recovery_commands,
+            severity="error",
+            context={
+                "requested_model": session_state.model or "default",
+                "error_details": str(e),
+            },
+        )
+        render_error(error, console=console)
         return
 
     # Configure task manager
@@ -430,7 +463,29 @@ async def simple_cli(
                             session_state.model = current_model
                             console.print(f"[green]Model switched to: {format_current_model(current_model)}[/green]")
                         except Exception as e:
-                            console.print(f"[red]Failed to switch model: {e}[/red]")
+                            # Get available models for suggestions
+                            available_models = get_available_models()
+                            available_model_ids = [m.id for m in available_models]
+
+                            error = make_model_not_available_error(
+                                model=selected.id,
+                                available_models=available_model_ids,
+                            )
+                            # Override the message to be more specific about the switch failure
+                            error = ActionableError(
+                                error_type=ErrorType.MODEL_NOT_AVAILABLE,
+                                message=f"Failed to switch to model '{selected.id}': {e}",
+                                suggestions=error.suggestions,
+                                recovery_commands=error.recovery_commands,
+                                related_items=error.related_items,
+                                severity="warning",
+                                context={
+                                    "requested_model": selected.id,
+                                    "current_model": session_state.model or "none",
+                                    "error_details": str(e),
+                                },
+                            )
+                            render_error(error, console=console)
                     continue
                 if result is None:
                     continue
@@ -554,7 +609,26 @@ def main(args: list[str] | None = None) -> int:
         console.print("\nGoodbye!", style=COLORS["dim"])
         return 0
     except Exception as e:
-        console.print(f"[red]Fatal error: {e}[/red]")
+        error = ActionableError(
+            error_type=ErrorType.INTERNAL_ERROR,
+            message=f"Fatal error: {e}",
+            suggestions=[
+                "Check if all dependencies are installed correctly",
+                "Verify your configuration files are valid",
+                "Try running with a different model using --model",
+                "Check for any environment variable issues",
+            ],
+            recovery_commands=[
+                "pip install -U kai-code",
+                "kai --help",
+            ],
+            severity="error",
+            context={
+                "error_type": type(e).__name__,
+                "error_details": str(e),
+            },
+        )
+        render_error(error, console=console)
         return 1
 
 
