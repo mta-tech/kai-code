@@ -9,7 +9,13 @@ import logging
 from typing import Dict, List, Optional
 from pathlib import Path
 
-from .blocks import MemoryBlock, SkillsMemoryBlock, LoadedSkillsMemoryBlock, ProjectMemoryBlock
+from .blocks import (
+    MemoryBlock,
+    SkillsMemoryBlock,
+    LoadedSkillsMemoryBlock,
+    ProjectMemoryBlock,
+    ConversationHistoryMemoryBlock,
+)
 from ..skills_parser import SkillMetadata, format_skills_for_prompt
 from ..skills_memory import parse_mdx_frontmatter
 
@@ -25,6 +31,7 @@ class MemoryManager:
         self._skills_block: Optional[SkillsMemoryBlock] = None
         self._loaded_skills_block: Optional[LoadedSkillsMemoryBlock] = None
         self._project_block: Optional[ProjectMemoryBlock] = None
+        self._history_block: Optional[ConversationHistoryMemoryBlock] = None
         self._load_default_blocks()
     
     def _load_default_blocks(self):
@@ -53,8 +60,16 @@ class MemoryManager:
             description="Project context, conventions, and important information"
         )
         self.add_block(self._project_block)
-        
-        logger.debug("Loaded default memory blocks: skills, loaded_skills, project")
+
+        # Add conversation history memory block
+        self._history_block = ConversationHistoryMemoryBlock(
+            label="conversation_history",
+            content="[CURRENTLY EMPTY]",
+            description="Summarized recent conversation history for context retention"
+        )
+        self.add_block(self._history_block)
+
+        logger.debug("Loaded default memory blocks: skills, loaded_skills, project, conversation_history")
     
     def add_block(self, block: MemoryBlock) -> None:
         """Add a memory block."""
