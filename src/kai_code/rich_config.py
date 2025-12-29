@@ -266,10 +266,12 @@ class SessionState:
         auto_approve: bool = False,
         no_splash: bool = False,
         model: str | None = None,
+        show_quick_start: bool = False,
     ) -> None:
         self.auto_approve = auto_approve
         self.no_splash = no_splash
         self.model = model  # Current model ID or handle
+        self.show_quick_start = show_quick_start  # Force show Quick Start panel
         self.exit_hint_until: float | None = None
         self.exit_hint_handle = None
         self.thread_id = str(uuid.uuid4())

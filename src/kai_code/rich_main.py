@@ -141,6 +141,12 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         help="Maximum total tokens to use (default: 500000)",
     )
 
+    parser.add_argument(
+        "--show-quick-start",
+        action="store_true",
+        help="Force showing the Quick Start panel even if onboarding is complete",
+    )
+
     return parser.parse_args(args)
 
 
@@ -182,11 +188,12 @@ def _show_startup_banner(session_state: SessionState) -> None:
 
     console.print()
 
-    # Show Quick Start panel for first-time users
-    if first_time:
+    # Show Quick Start panel for first-time users or if forced via CLI flag
+    if first_time or session_state.show_quick_start:
         render_quick_start_panel()
-        # Mark onboarding complete so panel won't show again
-        mark_onboarding_complete()
+        # Mark onboarding complete so panel won't show again automatically
+        if first_time:
+            mark_onboarding_complete()
     else:
         # Show helpful quick reference for returning users
         console.print(
@@ -521,6 +528,7 @@ def main(args: list[str] | None = None) -> int:
         auto_approve=parsed.auto_approve,
         no_splash=parsed.no_splash,
         model=parsed.model,
+        show_quick_start=parsed.show_quick_start,
     )
 
     # Get initial prompt from positional arguments
