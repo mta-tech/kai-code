@@ -33,6 +33,23 @@ def http_request(
     Returns:
         Dictionary with response data including status, headers, and content
     """
+    from urllib.parse import urlparse
+
+    progress_manager = get_progress_manager()
+
+    # Extract host from URL for progress display
+    parsed_url = urlparse(url)
+    host = parsed_url.netloc or url[:50]
+
+    # Report starting phase - connecting to host
+    progress_manager.report(
+        ToolProgress(
+            tool_name="http_request",
+            status_message=f"Connecting to {host}...",
+            phase=ProgressPhase.STARTING,
+        )
+    )
+
     try:
         kwargs = {"url": url, "method": method.upper(), "timeout": timeout}
 
@@ -46,12 +63,39 @@ def http_request(
             else:
                 kwargs["data"] = data
 
+        # Report connecting phase - sending request
+        progress_manager.report(
+            ToolProgress(
+                tool_name="http_request",
+                status_message=f"{method.upper()} {url}...",
+                phase=ProgressPhase.CONNECTING,
+            )
+        )
+
         response = requests.request(**kwargs)
+
+        # Report downloading phase - receiving response
+        progress_manager.report(
+            ToolProgress(
+                tool_name="http_request",
+                status_message=f"Downloading response ({response.status_code})...",
+                phase=ProgressPhase.DOWNLOADING,
+            )
+        )
 
         try:
             content = response.json()
         except Exception:
             content = response.text
+
+        # Report complete phase
+        progress_manager.report(
+            ToolProgress(
+                tool_name="http_request",
+                status_message=f"Request complete ({response.status_code})",
+                phase=ProgressPhase.COMPLETE,
+            )
+        )
 
         return {
             "success": response.status_code < 400,
@@ -62,6 +106,14 @@ def http_request(
         }
 
     except requests.exceptions.Timeout:
+        # Report timeout error
+        progress_manager.report(
+            ToolProgress(
+                tool_name="http_request",
+                status_message=f"Request timed out after {timeout}s",
+                phase=ProgressPhase.COMPLETE,
+            )
+        )
         return {
             "success": False,
             "status_code": 0,
@@ -70,6 +122,14 @@ def http_request(
             "url": url,
         }
     except requests.exceptions.RequestException as e:
+        # Report request error
+        progress_manager.report(
+            ToolProgress(
+                tool_name="http_request",
+                status_message=f"Request error: {type(e).__name__}",
+                phase=ProgressPhase.COMPLETE,
+            )
+        )
         return {
             "success": False,
             "status_code": 0,
@@ -78,6 +138,14 @@ def http_request(
             "url": url,
         }
     except Exception as e:
+        # Report general error
+        progress_manager.report(
+            ToolProgress(
+                tool_name="http_request",
+                status_message=f"Error: {type(e).__name__}",
+                phase=ProgressPhase.COMPLETE,
+            )
+        )
         return {
             "success": False,
             "status_code": 0,
