@@ -24,6 +24,18 @@ class TaskStatus(Enum):
     KILLED = "killed"
 
 
+class TaskPriority(Enum):
+    """Priority level for task scheduling.
+
+    Lower numeric values indicate higher priority for heap ordering.
+    HIGH priority tasks are executed before NORMAL, which execute before LOW.
+    """
+
+    HIGH = 1
+    NORMAL = 2
+    LOW = 3
+
+
 @dataclass
 class Task:
     """Base class for background tasks."""
