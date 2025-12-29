@@ -204,17 +204,27 @@ class TaskManager:
         return self._submit_task(task)
 
     def _submit_task(self, task: Task) -> str:
-        """Submit a task for background execution."""
+        """Submit a task for background execution.
+
+        Tasks are added to a priority queue with QUEUED status. The queue
+        is then processed to start tasks if slots are available, respecting
+        task priorities (high priority tasks start before lower priority ones).
+
+        Args:
+            task: The task to submit for execution.
+
+        Returns:
+            The task ID.
+        """
+        # Register the task
         self._tasks[task.id] = task
 
-        def run_and_notify():
-            try:
-                task.run()
-            finally:
-                self._notify_completion(task)
+        # Set status to QUEUED and add to priority queue
+        task.status = TaskStatus.QUEUED
+        self._pending_queue.push(task)
 
-        task._thread = threading.Thread(target=run_and_notify, daemon=True)
-        task._thread.start()
+        # Process queue to start tasks if slots are available
+        self._process_queue()
 
         return task.id
 
