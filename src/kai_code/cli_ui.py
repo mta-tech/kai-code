@@ -185,6 +185,8 @@ class TokenTracker:
         self.current_context = 0  # Total context including messages
         self.last_output = 0
         self._context_limit: int | None = None  # Maximum context window size
+        self._warned_80: bool = False  # Track if 80% warning has been shown
+        self._warned_95: bool = False  # Track if 95% warning has been shown
 
     @property
     def context_limit(self) -> int | None:
@@ -226,6 +228,33 @@ class TokenTracker:
         if percentage >= self.WARNING_THRESHOLD:
             return "warning"
         return "normal"
+
+    def should_show_warning(self) -> Literal["warning", "critical"] | None:
+        """Check if a threshold warning should be shown.
+
+        Returns the warning level if a threshold was just crossed for the first time,
+        or None if no warning should be shown. Automatically marks the warning as shown.
+
+        Returns:
+            'warning' - First time crossing 80% threshold
+            'critical' - First time crossing 95% threshold
+            None - No new warning to show (either below thresholds or already warned)
+        """
+        percentage = self.get_usage_percentage()
+        if percentage is None:
+            return None
+
+        # Check critical threshold first (95%)
+        if percentage >= self.CRITICAL_THRESHOLD and not self._warned_95:
+            self._warned_95 = True
+            return "critical"
+
+        # Check warning threshold (80%)
+        if percentage >= self.WARNING_THRESHOLD and not self._warned_80:
+            self._warned_80 = True
+            return "warning"
+
+        return None
 
     def _format_tokens_compact(self, tokens: int) -> str:
         """Format token count in compact K/M notation.
@@ -298,6 +327,8 @@ class TokenTracker:
         """Reset to baseline (for /clear command)."""
         self.current_context = self.baseline_context
         self.last_output = 0
+        self._warned_80 = False
+        self._warned_95 = False
 
     def add(self, input_tokens: int, output_tokens: int) -> None:
         """Add tokens from a response."""
