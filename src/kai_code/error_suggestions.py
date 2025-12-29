@@ -1235,3 +1235,511 @@ def make_skill_not_found_error(
         related_items=similar,
         context=context,
     )
+
+
+# =============================================================================
+# DBT Error Builder Functions
+# =============================================================================
+
+# Common database adapter instructions for dbt
+DBT_DATABASE_ADAPTERS: dict[str, dict[str, str]] = {
+    "duckdb": {
+        "check_command": "duckdb --version",
+        "install_command": "pip install dbt-duckdb",
+        "connection_format": "path/to/database.duckdb",
+        "description": "DuckDB (file-based analytics database)",
+    },
+    "postgres": {
+        "check_command": "psql --version",
+        "install_command": "pip install dbt-postgres",
+        "connection_format": "postgresql://user:password@host:port/database",
+        "description": "PostgreSQL",
+    },
+    "postgresql": {
+        "check_command": "psql --version",
+        "install_command": "pip install dbt-postgres",
+        "connection_format": "postgresql://user:password@host:port/database",
+        "description": "PostgreSQL",
+    },
+    "snowflake": {
+        "check_command": "snowsql --version",
+        "install_command": "pip install dbt-snowflake",
+        "connection_format": "account/database/schema",
+        "description": "Snowflake",
+    },
+    "bigquery": {
+        "check_command": "bq --version",
+        "install_command": "pip install dbt-bigquery",
+        "connection_format": "project_id/dataset",
+        "description": "Google BigQuery",
+    },
+    "redshift": {
+        "check_command": "psql --version",
+        "install_command": "pip install dbt-redshift",
+        "connection_format": "redshift://user:password@host:port/database",
+        "description": "Amazon Redshift",
+    },
+    "databricks": {
+        "check_command": "databricks --version",
+        "install_command": "pip install dbt-databricks",
+        "connection_format": "databricks://host:port/database",
+        "description": "Databricks",
+    },
+}
+
+
+def make_dbt_connection_error(
+    connection_string: str | None = None,
+    adapter_type: str | None = None,
+    error_details: str | None = None,
+) -> ActionableError:
+    """Create an ActionableError for a dbt database connection error.
+
+    This function builds an error message with database-specific troubleshooting
+    steps and recovery suggestions.
+
+    Args:
+        connection_string: The connection string that failed (optional).
+        adapter_type: The database adapter type (e.g., "duckdb", "postgres").
+            If not provided, attempts to infer from connection_string.
+        error_details: Additional error details from the exception (optional).
+
+    Returns:
+        An ActionableError with database-specific troubleshooting suggestions.
+
+    Example:
+        >>> error = make_dbt_connection_error("analytics.duckdb", adapter_type="duckdb")
+        >>> error.error_type
+        <ErrorType.DBT_CONNECTION_ERROR: 'dbt_connection_error'>
+        >>> "duckdb" in str(error.suggestions).lower()
+        True
+    """
+    # Try to infer adapter type from connection string
+    inferred_adapter = adapter_type
+    if not inferred_adapter and connection_string:
+        conn_lower = connection_string.lower()
+        if conn_lower.endswith(".duckdb") or conn_lower.endswith(".db"):
+            inferred_adapter = "duckdb"
+        elif conn_lower.startswith("postgresql://") or conn_lower.startswith("postgres://"):
+            inferred_adapter = "postgres"
+        elif conn_lower.startswith("redshift://"):
+            inferred_adapter = "redshift"
+        elif "snowflake" in conn_lower:
+            inferred_adapter = "snowflake"
+        elif "bigquery" in conn_lower or "bq://" in conn_lower:
+            inferred_adapter = "bigquery"
+        elif "databricks" in conn_lower:
+            inferred_adapter = "databricks"
+
+    # Build the main message
+    if connection_string:
+        message = f"Failed to connect to database: '{connection_string}'"
+    else:
+        message = "Failed to connect to database"
+
+    # Build suggestions based on adapter type
+    suggestions: list[str] = []
+
+    if inferred_adapter:
+        adapter_info = DBT_DATABASE_ADAPTERS.get(inferred_adapter.lower())
+        if adapter_info:
+            suggestions.append(f"Ensure {adapter_info['description']} is installed and running")
+            suggestions.append(f"Verify connection string format: {adapter_info['connection_format']}")
+
+    # Add general suggestions
+    suggestions.extend([
+        "Check if the database server is running and accessible",
+        "Verify credentials (username/password) are correct",
+        "Ensure network connectivity to the database host",
+    ])
+
+    # Add adapter-specific suggestions
+    if inferred_adapter == "duckdb" and connection_string:
+        # DuckDB is file-based, check if file exists
+        suggestions.insert(0, f"Check if the database file exists: {connection_string}")
+        suggestions.append("DuckDB will create a new file if it doesn't exist with write permissions")
+    elif inferred_adapter in ("postgres", "postgresql"):
+        suggestions.append("Check PostgreSQL is running: 'pg_isready'")
+        suggestions.append("Verify the database and schema exist")
+    elif inferred_adapter == "snowflake":
+        suggestions.append("Verify your Snowflake account, warehouse, and role settings")
+        suggestions.append("Check that your IP is whitelisted if using network policies")
+    elif inferred_adapter == "bigquery":
+        suggestions.append("Ensure GOOGLE_APPLICATION_CREDENTIALS is set")
+        suggestions.append("Verify project and dataset permissions")
+
+    # Add error-specific suggestions based on error_details
+    if error_details:
+        error_lower = error_details.lower()
+        if "permission" in error_lower or "access denied" in error_lower:
+            suggestions.insert(0, "Check database user permissions")
+        elif "timeout" in error_lower:
+            suggestions.insert(0, "Connection timed out - check network and firewall settings")
+        elif "authentication" in error_lower or "password" in error_lower:
+            suggestions.insert(0, "Authentication failed - verify username and password")
+        elif "not found" in error_lower or "does not exist" in error_lower:
+            suggestions.insert(0, "Database or schema does not exist - verify the name")
+        elif "ssl" in error_lower or "certificate" in error_lower:
+            suggestions.insert(0, "SSL/TLS issue - check certificate configuration")
+
+    # Build recovery commands
+    recovery_commands = []
+
+    if inferred_adapter:
+        adapter_info = DBT_DATABASE_ADAPTERS.get(inferred_adapter.lower())
+        if adapter_info:
+            recovery_commands.append(adapter_info["check_command"])
+            recovery_commands.append(f"# Install adapter if needed:")
+            recovery_commands.append(adapter_info["install_command"])
+
+    if inferred_adapter == "duckdb" and connection_string:
+        recovery_commands.insert(0, f"ls -la {connection_string}")
+    elif inferred_adapter in ("postgres", "postgresql"):
+        recovery_commands.insert(0, "pg_isready")
+
+    recovery_commands.extend([
+        "# Check dbt connection:",
+        "dbt debug",
+        "# View profiles:",
+        "cat ~/.dbt/profiles.yml",
+    ])
+
+    # Build context
+    context: dict[str, str] = {}
+    if connection_string:
+        context["connection_string"] = connection_string
+    if inferred_adapter:
+        context["adapter_type"] = inferred_adapter
+    if error_details:
+        # Truncate long error details
+        context["error_details"] = error_details[:200] if len(error_details) > 200 else error_details
+
+    return ActionableError(
+        error_type=ErrorType.DBT_CONNECTION_ERROR,
+        message=message,
+        suggestions=suggestions,
+        recovery_commands=recovery_commands,
+        context=context,
+    )
+
+
+def make_dbt_model_not_found_error(
+    model_name: str,
+    available_models: Sequence[str] | None = None,
+    project_dir: str | None = None,
+    n: int = DEFAULT_MAX_SUGGESTIONS,
+    cutoff: float = DEFAULT_SIMILARITY_THRESHOLD,
+) -> ActionableError:
+    """Create an ActionableError for a dbt model not found error.
+
+    This function builds an error message with similar model suggestions
+    based on fuzzy matching against available models in the dbt project.
+
+    Args:
+        model_name: The model name that was not found.
+        available_models: List of available model names in the project.
+            If not provided, no similar suggestions will be given.
+        project_dir: The dbt project directory (for context).
+        n: Maximum number of similar models to suggest. Defaults to 3.
+        cutoff: Similarity threshold (0.0 to 1.0). Defaults to 0.6.
+
+    Returns:
+        An ActionableError with suggestions for similar models and
+        troubleshooting steps.
+
+    Example:
+        >>> error = make_dbt_model_not_found_error("stg_ordes", ["stg_orders", "stg_customers"])
+        >>> error.error_type
+        <ErrorType.DBT_MODEL_NOT_FOUND: 'dbt_model_not_found'>
+        >>> "stg_orders" in error.related_items
+        True
+    """
+    model_str = model_name.strip()
+
+    # Find similar models
+    similar: list[str] = []
+    if available_models:
+        similar = suggest_values(model_str, available_models, n=n, cutoff=cutoff)
+
+    # Build the main message
+    message = f"dbt model '{model_str}' not found"
+
+    # Build suggestions
+    suggestions = [
+        "Check if the model name is spelled correctly",
+    ]
+
+    # Mention similar models
+    if similar:
+        if len(similar) == 1:
+            suggestions.insert(0, f"Did you mean '{similar[0]}'?")
+        else:
+            suggestions.insert(0, f"Similar models: {', '.join(similar)}")
+
+    # Add dbt-specific suggestions
+    suggestions.extend([
+        "Ensure the model file exists in the models/ directory",
+        "Check if the model is defined in a schema.yml file",
+        "Model files should be named <model_name>.sql",
+    ])
+
+    # If few available models, list them all
+    if available_models:
+        if len(available_models) <= 10:
+            formatted_models = ", ".join(sorted(available_models))
+            suggestions.append(f"Available models: {formatted_models}")
+        else:
+            suggestions.append(
+                f"Use 'dbt list' to see all {len(available_models)} available models"
+            )
+    else:
+        suggestions.append("Run 'dbt list' to see all available models in the project")
+
+    # Build recovery commands
+    recovery_commands = [
+        "dbt list --resource-type model",
+        f"# Find model file:",
+        f"find models/ -name '*{model_str}*' -type f 2>/dev/null",
+    ]
+
+    if similar:
+        # Suggest running the similar model
+        recovery_commands.insert(0, f"dbt run --select {similar[0]}")
+
+    recovery_commands.extend([
+        "# Compile to check for errors:",
+        "dbt compile",
+        "# Check model graph:",
+        "dbt docs generate && dbt docs serve",
+    ])
+
+    # Build context
+    context = {
+        "model_name": model_str,
+    }
+    if project_dir:
+        context["project_dir"] = project_dir
+    if available_models:
+        context["available_count"] = str(len(available_models))
+
+    return ActionableError(
+        error_type=ErrorType.DBT_MODEL_NOT_FOUND,
+        message=message,
+        suggestions=suggestions,
+        recovery_commands=recovery_commands,
+        related_items=similar,
+        context=context,
+    )
+
+
+# Common dbt command error patterns and their solutions
+DBT_COMMAND_ERROR_PATTERNS: dict[str, dict[str, list[str]]] = {
+    "compilation error": {
+        "suggestions": [
+            "Check for syntax errors in your model SQL",
+            "Verify all referenced models and sources exist",
+            "Ensure Jinja macros are correctly formatted",
+        ],
+        "recovery_commands": [
+            "dbt compile --select <model>",
+            "dbt parse",
+        ],
+    },
+    "database error": {
+        "suggestions": [
+            "Check your database connection settings",
+            "Verify the query is valid for your database",
+            "Ensure referenced tables/views exist",
+        ],
+        "recovery_commands": [
+            "dbt debug",
+        ],
+    },
+    "dependency error": {
+        "suggestions": [
+            "Check if upstream models are built",
+            "Verify ref() and source() references are correct",
+            "Run upstream dependencies first",
+        ],
+        "recovery_commands": [
+            "dbt run --select +<model>",
+            "dbt list --select +<model>",
+        ],
+    },
+    "test failed": {
+        "suggestions": [
+            "Review test results for specific failures",
+            "Check data quality in source tables",
+            "Verify test definitions in schema.yml",
+        ],
+        "recovery_commands": [
+            "dbt test --select <model>",
+            "dbt show --select <model> --limit 10",
+        ],
+    },
+    "runtime error": {
+        "suggestions": [
+            "Check for resource constraints (memory, disk)",
+            "Verify database permissions",
+            "Review query complexity",
+        ],
+        "recovery_commands": [
+            "dbt run --select <model> --full-refresh",
+        ],
+    },
+    "profile not found": {
+        "suggestions": [
+            "Check profiles.yml exists in ~/.dbt/",
+            "Verify the profile name matches dbt_project.yml",
+            "Ensure correct target is specified",
+        ],
+        "recovery_commands": [
+            "cat ~/.dbt/profiles.yml",
+            "cat dbt_project.yml | grep profile",
+            "dbt debug",
+        ],
+    },
+    "package not found": {
+        "suggestions": [
+            "Run 'dbt deps' to install packages",
+            "Check packages.yml for correct package versions",
+            "Verify package names and git URLs",
+        ],
+        "recovery_commands": [
+            "dbt deps",
+            "cat packages.yml",
+        ],
+    },
+}
+
+
+def make_dbt_command_error(
+    command: str,
+    error_output: str | None = None,
+    exit_code: int | None = None,
+    model_name: str | None = None,
+) -> ActionableError:
+    """Create an ActionableError for a dbt command execution error.
+
+    This function analyzes the error output and provides targeted
+    troubleshooting suggestions based on common dbt error patterns.
+
+    Args:
+        command: The dbt command that failed (e.g., "dbt run", "dbt test").
+        error_output: The error output from the command (stderr/stdout).
+        exit_code: The exit code from the command (optional).
+        model_name: The specific model being operated on (optional).
+
+    Returns:
+        An ActionableError with dbt-specific troubleshooting suggestions.
+
+    Example:
+        >>> error = make_dbt_command_error("dbt run", "Compilation Error", model_name="stg_orders")
+        >>> error.error_type
+        <ErrorType.DBT_COMMAND_ERROR: 'dbt_command_error'>
+        >>> "compile" in str(error.recovery_commands).lower()
+        True
+    """
+    # Build the main message
+    if model_name:
+        message = f"dbt command '{command}' failed for model '{model_name}'"
+    else:
+        message = f"dbt command '{command}' failed"
+
+    if exit_code is not None and exit_code != 0:
+        message += f" (exit code: {exit_code})"
+
+    # Analyze error output to determine specific suggestions
+    suggestions: list[str] = []
+    recovery_commands: list[str] = []
+
+    if error_output:
+        error_lower = error_output.lower()
+
+        # Check for known error patterns
+        for pattern, info in DBT_COMMAND_ERROR_PATTERNS.items():
+            if pattern in error_lower:
+                suggestions.extend(info["suggestions"])
+                for cmd in info["recovery_commands"]:
+                    # Replace <model> placeholder with actual model name if available
+                    if model_name:
+                        cmd = cmd.replace("<model>", model_name)
+                    recovery_commands.append(cmd)
+                break
+
+        # Additional pattern matching
+        if "permission denied" in error_lower:
+            suggestions.insert(0, "Check database user permissions")
+            suggestions.append("Ensure you have write access to the target schema")
+        elif "timeout" in error_lower:
+            suggestions.insert(0, "Command timed out - try with a longer timeout or smaller selection")
+            recovery_commands.insert(0, "dbt run --select <model> --threads 1")
+        elif "out of memory" in error_lower or "memory" in error_lower:
+            suggestions.insert(0, "Query ran out of memory - try optimizing or reducing data volume")
+            suggestions.append("Consider using incremental models for large datasets")
+        elif "relation" in error_lower and "does not exist" in error_lower:
+            suggestions.insert(0, "Referenced table or view does not exist")
+            suggestions.append("Run upstream dependencies first")
+            if model_name:
+                recovery_commands.insert(0, f"dbt run --select +{model_name}")
+        elif "column" in error_lower and ("not found" in error_lower or "does not exist" in error_lower):
+            suggestions.insert(0, "Referenced column does not exist - check column names")
+            suggestions.append("Verify source data schema matches your model")
+        elif "freshness" in error_lower:
+            suggestions.insert(0, "Source freshness check failed")
+            suggestions.append("Verify source data is being updated as expected")
+            recovery_commands.insert(0, "dbt source freshness")
+        elif "seed" in error_lower:
+            suggestions.insert(0, "Seed operation failed - check CSV file format")
+            recovery_commands.insert(0, "dbt seed --full-refresh")
+        elif "snapshot" in error_lower:
+            suggestions.insert(0, "Snapshot operation failed - check strategy and unique_key")
+            recovery_commands.insert(0, "dbt snapshot")
+
+    # Add general suggestions if none were added from patterns
+    if not suggestions:
+        suggestions = [
+            "Check the dbt logs for detailed error messages",
+            "Verify your dbt project configuration",
+            "Ensure all dependencies are up to date",
+        ]
+
+    # Add general recovery commands
+    if not recovery_commands:
+        recovery_commands = [
+            "# View detailed logs:",
+            "cat logs/dbt.log | tail -100",
+            "# Debug connection:",
+            "dbt debug",
+        ]
+
+    # Always add these useful commands at the end
+    recovery_commands.extend([
+        "# Parse project for errors:",
+        "dbt parse",
+        "# List all resources:",
+        "dbt list",
+    ])
+
+    # Build context
+    context: dict[str, str] = {
+        "command": command,
+    }
+    if model_name:
+        context["model"] = model_name
+    if exit_code is not None:
+        context["exit_code"] = str(exit_code)
+    if error_output:
+        # Truncate long error output
+        truncated = error_output[:300] if len(error_output) > 300 else error_output
+        # Clean up for display
+        truncated = truncated.replace("\n", " ").strip()
+        context["error_summary"] = truncated
+
+    return ActionableError(
+        error_type=ErrorType.DBT_COMMAND_ERROR,
+        message=message,
+        suggestions=suggestions,
+        recovery_commands=recovery_commands,
+        context=context,
+    )
