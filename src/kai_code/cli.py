@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import sys
 import time
@@ -28,6 +29,43 @@ from .envfile import load_dotenv
 EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 EXIT_INTERRUPT = 2
+
+
+def setup_logging(debug: bool = False) -> None:
+    """Set up logging for debugging purposes."""
+    # Configure logging based on environment variable or debug flag
+    log_level = logging.DEBUG if debug or os.environ.get("KAI_DEBUG") in {"1", "true", "TRUE", "yes", "YES"} else logging.INFO
+
+    # Create logger
+    logger = logging.getLogger("kai_code")
+    logger.setLevel(log_level)
+
+    # Create handlers if not already present
+    if not logger.handlers:
+        # Create formatter
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+
+        # Console handler (stderr)
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(log_level)
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
+
+        # File handler for TUI debugging (always write to file when debug is on)
+        if log_level == logging.DEBUG:
+            log_file = Path.cwd() / ".kai" / "debug.log"
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+            file_handler = logging.FileHandler(log_file, mode='w')
+            file_handler.setLevel(logging.DEBUG)
+            file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
+
+    return logger
+
+# Get or create logger
+logger = setup_logging()
 
 
 from .stream_events import (
@@ -773,6 +811,19 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Launch interactive TUI mode",
     )
+    
+    parser.add_argument(
+        "--debug-logs",
+        action="store_true",
+        help="Enable debug logging for TUI (same as KAI_DEBUG=1)",
+    )
+
+    parser.add_argument(
+        "--ui-mode",
+        choices=["textual", "rich"],
+        default="rich",
+        help="UI framework for interactive mode (default: rich)",
+    )
 
     parser.add_argument("--root", help="Project root (defaults to cwd)")
     parser.add_argument("--new", action="store_true", help="Start a new session")
@@ -836,6 +887,39 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     parser.add_argument("--skills", default=".skills", help="Skills directory (default: .skills)")
+
+    # Ralph Wiggum autonomous loop flags
+    parser.add_argument(
+        "--ralph",
+        action="store_true",
+        help="Enable Ralph autonomous loop mode (re-feeds prompt until completion)",
+    )
+    parser.add_argument(
+        "--ralph-promise",
+        "--completion-promise",
+        dest="ralph_promise",
+        help="Exact string to detect completion in Ralph loop (e.g., TESTS_PASS)",
+    )
+    parser.add_argument(
+        "--ralph-max-iterations",
+        "--max-iterations",
+        dest="ralph_max_iterations",
+        type=int,
+        default=50,
+        help="Maximum iterations for Ralph loop (default: 50)",
+    )
+    parser.add_argument(
+        "--ralph-timeout",
+        type=int,
+        help="Wall-clock timeout in seconds for Ralph loop (optional)",
+    )
+    parser.add_argument(
+        "--ralph-token-limit",
+        type=int,
+        default=500_000,
+        help="Maximum total tokens for Ralph loop (default: 500K)",
+    )
+
     parser.add_argument(
         "--system-prompt",
         "--system",
@@ -897,47 +981,90 @@ def main(argv: list[str] | None = None) -> int:
 
     # Launch TUI mode if --interactive flag is provided
     if args.interactive:
-        from .tui.app import KaiCodeApp
+        # Enable debug logging if requested
+        if getattr(args, "debug_logs", False):
+            os.environ["KAI_DEBUG"] = "1"
+            logger.debug("Debug logging enabled via --debug-logs flag")
+        
+        logger.info(f"Launching interactive {args.ui_mode} mode")
+        logger.debug(f"Interactive mode args: {args}")
+        
+        try:
+            if args.ui_mode == "textual":
+                from .tui.app import KaiCodeApp
+            else:
+                from .rich_ui.app import KaiRichApp as KaiCodeApp
 
-        root_dir = _resolve_root_dir(args.root)
-        load_dotenv(root_dir=root_dir)
+            logger.debug("Importing KaiCodeApp")
+            root_dir = _resolve_root_dir(args.root)
+            logger.debug(f"Root directory: {root_dir}")
+            
+            load_dotenv(root_dir=root_dir)
+            logger.debug("Loaded dotenv")
 
-        migrate_global_settings(root_dir)
-        migrate_project_settings(root_dir)
-        settings = load_settings(root_dir)
+            migrate_global_settings(root_dir)
+            migrate_project_settings(root_dir)
+            logger.debug("Migrated settings")
+            
+            settings = load_settings(root_dir)
+            logger.debug(f"Settings loaded: {settings}")
 
-        # Model selection precedence: CLI --model > CLI --toolset > settings.default_model > settings.default_toolset
-        if args.model:
-            model = args.model
-        elif args.toolset:
-            model = _toolset_to_default_model(args.toolset)
-        elif settings.default_model:
-            model = settings.default_model
-        else:
-            model = _toolset_to_default_model(settings.default_toolset)
+            # Model selection precedence:
+            # CLI --model > CLI --toolset > settings.default_model > settings.default_toolset > models.json default
+            if args.model:
+                model = args.model
+                logger.debug(f"Using model from CLI arg: {model}")
+            elif args.toolset:
+                model = _toolset_to_default_model(args.toolset)
+                logger.debug(f"Using model from toolset: {model}")
+            elif settings.default_model:
+                model = settings.default_model
+                logger.debug(f"Using model from settings: {model}")
+            elif settings.default_toolset:
+                model = _toolset_to_default_model(settings.default_toolset)
+                logger.debug(f"Using model from toolset in settings: {model}")
+            else:
+                from .model import get_default_model
+                model = get_default_model()
+                logger.debug(f"Using default model: {model}")
 
-        # Resolve permission mode for yolo setting
-        if args.permission_mode:
-            permission_mode = args.permission_mode
-        elif args.yolo is True:
-            permission_mode = "bypassPermissions"
-        elif args.yolo is False:
-            permission_mode = "default"
-        elif settings.permission_mode:
-            permission_mode = settings.permission_mode
-        else:
-            permission_mode = "bypassPermissions"
+            # Resolve permission mode for yolo setting
+            if args.permission_mode:
+                permission_mode = args.permission_mode
+                logger.debug(f"Using permission mode from CLI: {permission_mode}")
+            elif args.yolo is True:
+                permission_mode = "bypassPermissions"
+                logger.debug("Using YOLO mode from CLI arg")
+            elif args.yolo is False:
+                permission_mode = "default"
+                logger.debug("Using non-YOLO mode from CLI arg")
+            elif settings.permission_mode:
+                permission_mode = settings.permission_mode
+                logger.debug(f"Using permission mode from settings: {permission_mode}")
+            else:
+                permission_mode = "bypassPermissions"
+                logger.debug("Using default permission mode")
 
-        mode_res = resolve_permission_mode(mode=permission_mode, base_permissions=None)
+            mode_res = resolve_permission_mode(mode=permission_mode, base_permissions=None)
+            logger.debug(f"Permission mode resolved: yolo={mode_res.yolo}, interrupt_on={mode_res.interrupt_on}")
 
-        app = KaiCodeApp(
-            root_dir=str(root_dir),
-            model=model or "default",
-            session=args.agent or "default",
-            yolo=bool(mode_res.yolo),
-        )
-        app.run()
-        return EXIT_SUCCESS
+            logger.info("Initializing KaiCodeApp")
+            app = KaiCodeApp(
+                root_dir=str(root_dir),
+                model=model or "default",
+                session=args.agent or "default",
+                yolo=bool(mode_res.yolo),
+            )
+            
+            logger.info("Starting KaiCodeApp")
+            app.run()
+            logger.info("KaiCodeApp finished")
+            return EXIT_SUCCESS
+            
+        except Exception as e:
+            logger.error(f"Error in interactive mode: {e}")
+            logger.debug(traceback.format_exc())
+            return EXIT_ERROR
 
     from .system_prompts import resolve_system_prompt
 
@@ -1078,15 +1205,18 @@ def main(argv: list[str] | None = None) -> int:
             pass
 
     # Model selection precedence:
-    # CLI --model > CLI --toolset > settings.default_model > settings.default_toolset
+    # CLI --model > CLI --toolset > settings.default_model > settings.default_toolset > models.json default
     if args.model:
         model = args.model
     elif args.toolset:
         model = _toolset_to_default_model(args.toolset)
     elif settings.default_model:
         model = settings.default_model
-    else:
+    elif settings.default_toolset:
         model = _toolset_to_default_model(settings.default_toolset)
+    else:
+        from .model import get_default_model
+        model = get_default_model()
 
     # Permissions precedence: CLI explicit patterns override settings.
     permissions = _build_permissions(args)
@@ -1223,6 +1353,22 @@ def main(argv: list[str] | None = None) -> int:
         permissions=mode_res.permissions,
         enabled_tools=enabled_tools,
     )
+
+    # Start Ralph loop if requested
+    if args.ralph:
+        agent.ralph_manager.start_loop(
+            prompt=prompt,
+            completion_promise=args.ralph_promise,
+            max_iterations=args.ralph_max_iterations,
+            timeout_seconds=args.ralph_timeout,
+            token_limit=args.ralph_token_limit,
+        )
+        print(
+            f"⟳ Ralph loop started: max {args.ralph_max_iterations} iterations, "
+            f"{args.ralph_token_limit:,} token limit"
+        )
+        if args.ralph_promise:
+            print(f"   Completing on: '{args.ralph_promise}'")
 
     if args.output_format == "stream-json":
         if args.stream_event_types:
@@ -1506,7 +1652,16 @@ def _resume_main(argv: list[str]) -> int:
         print(json.dumps(payload, indent=2))
         return EXIT_SUCCESS
 
-    model = args.model or settings.default_model or _toolset_to_default_model(settings.default_toolset)
+    # Model selection precedence (same as main command)
+    if args.model:
+        model = args.model
+    elif settings.default_model:
+        model = settings.default_model
+    elif settings.default_toolset:
+        model = _toolset_to_default_model(settings.default_toolset)
+    else:
+        from .model import get_default_model
+        model = get_default_model()
     provider = _provider_from_model(model)
     required_vars = _credentials_env_vars(provider)
     if required_vars and not _has_any_env(required_vars):

@@ -60,6 +60,21 @@ COMMANDS: dict[str, Command] = {
         name="save",
         description="Force save current session",
     ),
+    "ralph-loop": Command(
+        name="ralph-loop",
+        description="Start Ralph autonomous loop (e.g., /ralph-loop 'Fix all tests' --promise TESTS_PASS)",
+        requires_arg=True,
+    ),
+    "cancel-ralph": Command(
+        name="cancel-ralph",
+        description="Cancel active Ralph loop",
+        aliases=["ralph-cancel", "stop-ralph"],
+    ),
+    "ralph-status": Command(
+        name="ralph-status",
+        description="Show Ralph loop status",
+        aliases=["ralph"],
+    ),
 }
 
 # Add aliases to lookup

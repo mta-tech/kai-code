@@ -1,4 +1,5 @@
 """Slash command handlers for kai-dbt CLI."""
+
 from __future__ import annotations
 
 import subprocess
@@ -51,6 +52,15 @@ def parse_dbt_command(command: str) -> tuple[str, dict[str, Any]]:
     if parts[0] == "/model":
         return "model", {}
 
+    if parts[0] == "/ralph-patterns":
+        return "ralph-patterns", {}
+
+    if parts[0] == "/ralph-pattern" and len(parts) > 1:
+        return "ralph-pattern", {"name": parts[1]}
+
+    if parts[0] == "/ralph-pattern":
+        return "ralph-pattern", {}
+
     if parts[0] == "/help":
         return "help", {}
 
@@ -91,6 +101,8 @@ class DbtCommandHandler:
             "list": self._handle_dbt_list,
             "show": self._handle_dbt_show,
             "help": self._handle_help,
+            "ralph-pattern": self._handle_ralph_pattern,
+            "ralph-patterns": self._handle_list_ralph_patterns,
         }
 
         handler = handlers.get(cmd)
@@ -111,6 +123,9 @@ dbt Slash Commands:
   /dbt compile [model] Compile dbt models
   /dbt list            List dbt resources
   /dbt show <model>    Preview model output
+  /brainstorm [topic]  Start a design brainstorm session
+  /ralph-patterns      List available Ralph autonomous patterns
+  /ralph-pattern <name> Start a Ralph pattern (e.g., test-until-pass)
   /help                Show this help
   /exit                Exit kai-dbt
 """
@@ -201,16 +216,20 @@ dbt Slash Commands:
         if select:
             full_command.extend(["--select", select])
 
-        full_command.extend([
-            "--project-dir",
-            str(self.agent.dbt_project_dir),
-        ])
+        full_command.extend(
+            [
+                "--project-dir",
+                str(self.agent.dbt_project_dir),
+            ]
+        )
 
         if self.agent.dbt_profiles_dir:
-            full_command.extend([
-                "--profiles-dir",
-                str(self.agent.dbt_profiles_dir),
-            ])
+            full_command.extend(
+                [
+                    "--profiles-dir",
+                    str(self.agent.dbt_profiles_dir),
+                ]
+            )
 
         try:
             result = subprocess.run(
@@ -232,3 +251,28 @@ dbt Slash Commands:
             return "dbt command not found. Ensure dbt is installed."
         except Exception as e:
             return f"Error: {e}"
+
+    def _handle_ralph_pattern(self, args: dict) -> str:
+        """Handle /ralph-pattern <name> command."""
+        from .ralph_patterns import start_dbt_ralph_pattern
+
+        pattern_name = args.get("name")
+        if not pattern_name:
+            return "Usage: /ralph-pattern <pattern_name> [--max-iterations N]"
+
+        try:
+            result = start_dbt_ralph_pattern(self.agent, pattern_name)
+            return result
+        except ValueError as e:
+            return str(e)
+        except Exception as e:
+            return f"Error starting Ralph pattern: {e}"
+
+    def _handle_list_ralph_patterns(self, args: dict) -> str:
+        """Handle /ralph-patterns command."""
+        from .ralph_patterns import list_dbt_ralph_patterns
+
+        try:
+            return list_dbt_ralph_patterns()
+        except Exception as e:
+            return f"Error listing Ralph patterns: {e}"
