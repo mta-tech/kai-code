@@ -99,7 +99,11 @@ class MemoryManager:
     def get_loaded_skills_block(self) -> Optional[LoadedSkillsMemoryBlock]:
         """Get loaded skills memory block."""
         return self._loaded_skills_block
-    
+
+    def get_history_block(self) -> Optional[ConversationHistoryMemoryBlock]:
+        """Get conversation history memory block."""
+        return self._history_block
+
     def get_skill_blocks(self) -> tuple[Optional[SkillsMemoryBlock], Optional[LoadedSkillsMemoryBlock]]:
         """Get skills-related memory blocks."""
         skills_block = self.get_skills_block()
