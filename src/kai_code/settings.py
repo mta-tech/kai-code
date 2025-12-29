@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -214,6 +214,34 @@ def load_global_last_session() -> str | None:
 _SESSION_FIELDS = {"last_session", "agents"}
 
 
+def settings_to_dict(settings: KaiSettings, *, exclude_session_fields: bool = True) -> dict[str, Any]:
+    """Convert KaiSettings dataclass to a dict for export.
+
+    Filters out None values and optionally session-specific fields to produce
+    a clean JSON-serializable dictionary.
+
+    Args:
+        settings: The KaiSettings instance to convert.
+        exclude_session_fields: If True, exclude session-specific fields
+            (last_session, agents). Defaults to True.
+
+    Returns:
+        A dictionary with non-None values, optionally excluding session fields.
+    """
+    data = asdict(settings)
+
+    # Filter out None values and optionally session-specific fields
+    result: dict[str, Any] = {}
+    for key, value in data.items():
+        if value is None:
+            continue
+        if exclude_session_fields and key in _SESSION_FIELDS:
+            continue
+        result[key] = value
+
+    return result
+
+
 def export_settings(root_dir: Path, output_path: Path) -> tuple[bool, str]:
     """Export merged settings to a JSON file.
 
@@ -229,24 +257,7 @@ def export_settings(root_dir: Path, output_path: Path) -> tuple[bool, str]:
     """
     try:
         settings = load_settings(root_dir)
-
-        # Convert settings to dict, excluding session-specific fields and None values
-        export_data: dict[str, Any] = {}
-
-        if settings.default_model is not None:
-            export_data["default_model"] = settings.default_model
-        if settings.default_toolset is not None:
-            export_data["default_toolset"] = settings.default_toolset
-        if settings.permission_mode is not None:
-            export_data["permission_mode"] = settings.permission_mode
-        if settings.allowed_tools is not None:
-            export_data["allowed_tools"] = settings.allowed_tools
-        if settings.disallowed_tools is not None:
-            export_data["disallowed_tools"] = settings.disallowed_tools
-        if settings.allowed_commands is not None:
-            export_data["allowed_commands"] = settings.allowed_commands
-        if settings.disallowed_commands is not None:
-            export_data["disallowed_commands"] = settings.disallowed_commands
+        export_data = settings_to_dict(settings, exclude_session_fields=True)
 
         _write_json(output_path, export_data)
 
