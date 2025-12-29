@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Callable
 from kai_code.rich_config import console, COLORS, rich_settings
 from kai_code.cli_ui import TokenTracker, show_interactive_help
 from kai_code.skills import discover_skills_legacy
-from kai_code.settings import export_settings
+from kai_code.settings import export_settings, import_settings
 
 if TYPE_CHECKING:
     from kai_code.model import ModelInfo
@@ -95,6 +95,11 @@ def handle_command(
     # Settings export command
     if command == "/export-settings" or command.startswith("/export-settings "):
         _handle_export_settings(command_input)
+        return None
+
+    # Settings import command
+    if command == "/import-settings" or command.startswith("/import-settings "):
+        _handle_import_settings(command_input)
         return None
 
     # Unknown command - let it pass through as regular input
@@ -455,6 +460,102 @@ def _handle_export_settings(command_input: str) -> None:
 
     # Export settings
     success, message = export_settings(root_dir, output_path)
+
+    console.print()
+    if success:
+        console.print(f"[green]✓ {message}[/green]")
+    else:
+        console.print(f"[red]✗ {message}[/red]")
+    console.print()
+
+
+def _handle_import_settings(command_input: str) -> None:
+    """Handle /import-settings <filename> [--target global|project|local] command.
+
+    Imports settings from a JSON file to the specified target.
+
+    Args:
+        command_input: The full command string
+    """
+    import shlex
+
+    try:
+        parts = shlex.split(command_input.strip())
+    except ValueError as e:
+        console.print()
+        console.print(f"[red]✗ Error parsing command: {e}[/red]")
+        console.print()
+        return
+
+    # Skip /import-settings command itself
+    args = parts[1:] if len(parts) > 1 else []
+
+    if not args:
+        console.print()
+        console.print("[yellow]Usage: /import-settings <filename> [--target global|project|local][/yellow]")
+        console.print("[dim]Default target is 'project'.[/dim]")
+        console.print()
+        return
+
+    # Parse filename and optional --target flag
+    filename = None
+    target = "project"  # Default target
+
+    i = 0
+    while i < len(args):
+        if args[i] == "--target":
+            if i + 1 < len(args):
+                target = args[i + 1].lower()
+                i += 2
+            else:
+                console.print()
+                console.print("[red]✗ Error: --target requires a value (global, project, or local)[/red]")
+                console.print()
+                return
+        elif args[i].startswith("--"):
+            console.print()
+            console.print(f"[yellow]Unknown flag: {args[i]}[/yellow]")
+            console.print()
+            return
+        elif filename is None:
+            filename = args[i]
+            i += 1
+        else:
+            console.print()
+            console.print("[yellow]Too many arguments. Usage: /import-settings <filename> [--target global|project|local][/yellow]")
+            console.print()
+            return
+
+    if filename is None:
+        console.print()
+        console.print("[yellow]Usage: /import-settings <filename> [--target global|project|local][/yellow]")
+        console.print("[dim]Default target is 'project'.[/dim]")
+        console.print()
+        return
+
+    # Validate target
+    valid_targets = {"global", "project", "local"}
+    if target not in valid_targets:
+        console.print()
+        console.print(f"[red]✗ Invalid target '{target}'. Must be one of: {', '.join(sorted(valid_targets))}[/red]")
+        console.print()
+        return
+
+    # Determine root directory and input path
+    root_dir = rich_settings.project_root or Path.cwd()
+    input_path = Path(filename)
+    if not input_path.is_absolute():
+        input_path = root_dir / filename
+
+    # Validate file exists before attempting import
+    if not input_path.exists():
+        console.print()
+        console.print(f"[red]✗ File not found: {input_path}[/red]")
+        console.print()
+        return
+
+    # Import settings
+    success, message = import_settings(input_path, target, root_dir)
 
     console.print()
     if success:
