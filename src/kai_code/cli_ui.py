@@ -603,3 +603,18 @@ def show_help() -> None:
         "  quit, exit, q   Exit the session (just type and press Enter)", style=COLORS["dim"]
     )
     console.print()
+
+    console.print("[bold]Settings Commands:[/bold]", style=COLORS["primary"])
+    console.print(
+        "  /export-settings [file]           Export settings to JSON (default: kai-settings.json)",
+        style=COLORS["dim"],
+    )
+    console.print(
+        "  /import-settings <file> [--target global|project|local]",
+        style=COLORS["dim"],
+    )
+    console.print(
+        "                                    Import settings from JSON (default: project)",
+        style=COLORS["dim"],
+    )
+    console.print()

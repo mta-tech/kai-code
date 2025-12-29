@@ -49,6 +49,8 @@ COMMANDS = {
     "skills": "List available skills",
     "tasks": "Show background tasks panel",
     "tokens": "Show token usage for current session",
+    "export-settings": "Export settings to file (default: kai-settings.json)",
+    "import-settings": "Import settings from file (--target global|project|local)",
     "ralph-loop": "Start Ralph autonomous loop",
     "ralph-status": "Show Ralph loop status",
     "cancel-ralph": "Cancel active Ralph loop",

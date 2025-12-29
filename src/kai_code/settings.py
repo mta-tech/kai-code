@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -208,3 +208,229 @@ def load_global_last_session() -> str | None:
     data = _read_json(global_settings_path())
     v = data.get("last_session")
     return v if isinstance(v, str) and v.strip() else None
+
+
+# Fields that should not be exported (session-specific)
+_SESSION_FIELDS = {"last_session", "agents"}
+
+
+def settings_to_dict(settings: KaiSettings, *, exclude_session_fields: bool = True) -> dict[str, Any]:
+    """Convert KaiSettings dataclass to a dict for export.
+
+    Filters out None values and optionally session-specific fields to produce
+    a clean JSON-serializable dictionary.
+
+    Args:
+        settings: The KaiSettings instance to convert.
+        exclude_session_fields: If True, exclude session-specific fields
+            (last_session, agents). Defaults to True.
+
+    Returns:
+        A dictionary with non-None values, optionally excluding session fields.
+    """
+    data = asdict(settings)
+
+    # Filter out None values and optionally session-specific fields
+    result: dict[str, Any] = {}
+    for key, value in data.items():
+        if value is None:
+            continue
+        if exclude_session_fields and key in _SESSION_FIELDS:
+            continue
+        result[key] = value
+
+    return result
+
+
+def export_settings(root_dir: Path, output_path: Path) -> tuple[bool, str]:
+    """Export merged settings to a JSON file.
+
+    Loads the merged settings from global/project/local files and writes
+    configuration settings (excluding session-specific fields) to output_path.
+
+    Args:
+        root_dir: Project root directory for loading settings.
+        output_path: Path to write the exported settings JSON file.
+
+    Returns:
+        A tuple of (success, message) indicating the result.
+    """
+    try:
+        settings = load_settings(root_dir)
+        export_data = settings_to_dict(settings, exclude_session_fields=True)
+
+        _write_json(output_path, export_data)
+
+        field_count = len(export_data)
+        return True, f"Exported {field_count} setting(s) to {output_path}"
+
+    except Exception as e:
+        return False, f"Failed to export settings: {e}"
+
+
+# Valid configuration keys (both snake_case and camelCase versions)
+# Excludes session-specific fields which should not be imported
+_VALID_CONFIG_KEYS = {
+    # snake_case
+    "default_model",
+    "default_toolset",
+    "permission_mode",
+    "allowed_tools",
+    "disallowed_tools",
+    "allowed_commands",
+    "disallowed_commands",
+    # camelCase
+    "defaultModel",
+    "defaultToolset",
+    "permissionMode",
+    "allowedTools",
+    "disallowedTools",
+    "allowedCommands",
+    "disallowedCommands",
+}
+
+# Expected types for each setting field
+# Keys that expect string values
+_STRING_KEYS = {
+    "default_model",
+    "defaultModel",
+    "default_toolset",
+    "defaultToolset",
+    "permission_mode",
+    "permissionMode",
+}
+
+# Keys that expect list of strings
+_LIST_KEYS = {
+    "allowed_tools",
+    "allowedTools",
+    "disallowed_tools",
+    "disallowedTools",
+    "allowed_commands",
+    "allowedCommands",
+    "disallowed_commands",
+    "disallowedCommands",
+}
+
+
+def validate_settings_dict(data: dict[str, Any]) -> list[str]:
+    """Validate that a settings dict contains only valid KaiSettings fields with correct types.
+
+    Validates that:
+    - All keys are valid KaiSettings configuration fields (snake_case or camelCase)
+    - Session-specific fields (last_session, agents) are not present
+    - Value types match expected types (strings or lists of strings)
+
+    Args:
+        data: Dictionary of settings to validate.
+
+    Returns:
+        A list of validation error messages. Empty list if all valid.
+    """
+    errors: list[str] = []
+
+    if not isinstance(data, dict):
+        return ["Settings must be a dictionary"]
+
+    for key, value in data.items():
+        # Check for session-specific fields
+        if key in _SESSION_FIELDS:
+            errors.append(f"Cannot import session-specific field: {key}")
+            continue
+
+        # Check for unknown keys
+        if key not in _VALID_CONFIG_KEYS:
+            errors.append(f"Unknown settings key: {key}")
+            continue
+
+        # Skip None values (they're valid but will be filtered)
+        if value is None:
+            continue
+
+        # Validate string fields
+        if key in _STRING_KEYS:
+            if not isinstance(value, str):
+                errors.append(f"Field '{key}' must be a string, got {type(value).__name__}")
+            elif not value.strip():
+                errors.append(f"Field '{key}' cannot be an empty string")
+
+        # Validate list fields
+        elif key in _LIST_KEYS:
+            if isinstance(value, str):
+                # Strings are acceptable for list fields (will be split by comma)
+                pass
+            elif isinstance(value, list):
+                for i, item in enumerate(value):
+                    if not isinstance(item, str):
+                        errors.append(f"Field '{key}' item {i} must be a string, got {type(item).__name__}")
+            else:
+                errors.append(f"Field '{key}' must be a list of strings or comma-separated string, got {type(value).__name__}")
+
+    return errors
+
+
+def import_settings(input_path: Path, target: str, root_dir: Path) -> tuple[bool, str]:
+    """Import settings from a JSON file to a target settings file.
+
+    Reads settings from the input file and merges them with the existing
+    settings in the target file (global, project, or local).
+
+    Args:
+        input_path: Path to the JSON file containing settings to import.
+        target: Target settings file - 'global', 'project', or 'local'.
+        root_dir: Project root directory for project/local settings paths.
+
+    Returns:
+        A tuple of (success, message) indicating the result.
+    """
+    # Validate target
+    valid_targets = {"global", "project", "local"}
+    if target not in valid_targets:
+        return False, f"Invalid target '{target}'. Must be one of: {', '.join(sorted(valid_targets))}"
+
+    # Check input file exists
+    if not input_path.exists():
+        return False, f"Input file not found: {input_path}"
+
+    # Read input file
+    try:
+        input_data = json.loads(input_path.read_text())
+        if not isinstance(input_data, dict):
+            return False, "Input file must contain a JSON object"
+    except json.JSONDecodeError as e:
+        return False, f"Invalid JSON in input file: {e}"
+    except Exception as e:
+        return False, f"Failed to read input file: {e}"
+
+    # Validate settings using helper function
+    validation_errors = validate_settings_dict(input_data)
+    if validation_errors:
+        return False, f"Invalid settings: {'; '.join(validation_errors)}"
+
+    # No settings to import
+    if not input_data:
+        return False, "No settings to import (file is empty or contains only null values)"
+
+    # Determine target path
+    if target == "global":
+        target_path = global_settings_path()
+    elif target == "project":
+        target_path = project_settings_path(root_dir)
+    else:  # local
+        target_path = local_settings_path(root_dir)
+
+    try:
+        # Read existing settings
+        existing_data = _read_json(target_path)
+
+        # Merge imported settings with existing (imported takes precedence)
+        merged_data = {**existing_data, **input_data}
+
+        # Write merged settings
+        _write_json(target_path, merged_data)
+
+        imported_keys = list(input_data.keys())
+        return True, f"Imported {len(imported_keys)} setting(s) to {target} settings: {', '.join(imported_keys)}"
+
+    except Exception as e:
+        return False, f"Failed to write settings: {e}"
