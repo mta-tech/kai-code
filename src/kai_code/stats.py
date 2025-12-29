@@ -19,6 +19,13 @@ class RunStats:
     tool_latency_total_ms: int = 0
     tool_latency_max_ms: int = 0
 
+    # Token usage metrics (mirrors UsageStats from stream_events.py)
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+    cached_input_tokens: int | None = None
+    reasoning_tokens: int | None = None
+
     @property
     def duration_ms(self) -> int:
         return max(0, self.ended_ms - self.started_ms)
