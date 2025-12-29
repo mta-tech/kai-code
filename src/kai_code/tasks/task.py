@@ -18,6 +18,7 @@ class TaskStatus(Enum):
     """Status of a background task."""
 
     PENDING = "pending"
+    QUEUED = "queued"
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
@@ -103,6 +104,8 @@ class Task:
             return "killed"
         elif self.status == TaskStatus.PENDING:
             return "pending"
+        elif self.status == TaskStatus.QUEUED:
+            return "⏳ queued"
         return str(self.status.value)
 
 
