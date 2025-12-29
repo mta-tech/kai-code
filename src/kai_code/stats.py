@@ -102,6 +102,47 @@ class RunStats:
         if reasoning is not None:
             self.reasoning_tokens = (self.reasoning_tokens or 0) + reasoning
 
+    def to_dict(self) -> dict:
+        """Return a clean dict representation for JSON output.
+
+        The structure is compatible with the existing CLI stats format used
+        in stream-json output. Token usage is nested under a 'token_usage' key.
+
+        Returns:
+            A dictionary with all stats fields, ready for JSON serialization.
+        """
+        # Calculate average latency if we have tool results
+        tool_latency_ms_avg: float | None = None
+        if self.tool_result_count > 0 and self.tool_latency_total_ms > 0:
+            tool_latency_ms_avg = self.tool_latency_total_ms / self.tool_result_count
+
+        return {
+            "duration_ms": self.duration_ms,
+            "started_ms": self.started_ms,
+            "ended_ms": self.ended_ms,
+            "ttft_ms": self.ttft_ms,
+            "chunk_count": self.chunk_count,
+            "interrupted": self.interrupted,
+            "message_count": self.message_count,
+            "turn_count": self.turn_count,
+            "step_count": self.step_count,
+            "tool_call_count": self.tool_call_count,
+            "tool_result_count": self.tool_result_count,
+            "tool_error_count": self.tool_error_count,
+            "tool_count": len(self.tool_names),
+            "tool_names": dict(self.tool_names) if self.tool_names else {},
+            "tool_latency_ms_total": self.tool_latency_total_ms,
+            "tool_latency_ms_avg": tool_latency_ms_avg,
+            "tool_latency_ms_max": self.tool_latency_max_ms if self.tool_latency_max_ms > 0 else None,
+            "token_usage": {
+                "prompt_tokens": self.prompt_tokens,
+                "completion_tokens": self.completion_tokens,
+                "total_tokens": self.total_tokens,
+                "cached_input_tokens": self.cached_input_tokens,
+                "reasoning_tokens": self.reasoning_tokens,
+            },
+        }
+
 
 def now_ms() -> int:
     return int(time.time() * 1000)
