@@ -371,15 +371,7 @@ def _stream_json_run(
             next_event_id += 1
             _emit_jsonl(payload)
 
-    ttft_ms: int | None = None
     stop_reason: str | None = None
-    token_usage: dict[str, int | None] = {
-        "prompt_tokens": None,
-        "completion_tokens": None,
-        "total_tokens": None,
-        "cached_input_tokens": None,
-        "reasoning_tokens": None,
-    }
 
     _emit(
         {
@@ -407,7 +399,6 @@ def _stream_json_run(
     open_step_id: int | None = None
 
     tool_call_started_ms: dict[str, int] = {}
-    tool_latencies: list[int] = []
 
     try:
         for chunk in agent.stream(prompt):
@@ -415,8 +406,8 @@ def _stream_json_run(
             ts_ms = now_ms()
             emitted = False
 
-            if ttft_ms is None:
-                ttft_ms = max(0, ts_ms - started_ms)
+            if stats.ttft_ms is None:
+                stats.ttft_ms = max(0, ts_ms - started_ms)
 
             if isinstance(chunk, dict) and isinstance(chunk.get("messages"), list):
                 last_snapshot = chunk
@@ -510,6 +501,9 @@ def _stream_json_run(
                                 continue
                             seen_tool_calls.add(key)
 
+                            # Record tool call in RunStats
+                            stats.record_tool_call(te.tool_name)
+
                             if tc_id is not None and tc_id not in tool_call_started_ms:
                                 tool_call_started_ms[tc_id] = ts_ms
                             _emit(
@@ -540,7 +534,21 @@ def _stream_json_run(
                             tool_latency_ms = None
                             if tr_id is not None and tr_id in tool_call_started_ms:
                                 tool_latency_ms = max(0, ts_ms - tool_call_started_ms[tr_id])
-                                tool_latencies.append(tool_latency_ms)
+
+                            # Detect if this is an error result
+                            result_fields = extract_tool_result_fields(te)
+                            is_error = (
+                                result_fields.get("status") == "error"
+                                or (result_fields.get("exit_code") is not None and result_fields.get("exit_code") != 0)
+                            )
+
+                            # Record tool result in RunStats
+                            stats.record_tool_result(
+                                te.tool_name or "",
+                                latency_ms=tool_latency_ms,
+                                is_error=is_error,
+                            )
+
                             _emit(
                                 {
                                     "type": "tool_result",
@@ -647,7 +655,7 @@ def _stream_json_run(
                     "started_ms": started_ms,
                     "ended_ms": ts_ms,
                     "duration_ms": max(0, ts_ms - started_ms),
-                    "ttft_ms": ttft_ms,
+                    "ttft_ms": stats.ttft_ms,
                     "chunk_count": stats.chunk_count,
                 },
                 **({"traceback": traceback.format_exc()} if include_tb else {}),
@@ -685,23 +693,20 @@ def _stream_json_run(
         open_turn_id = None
 
     output: str | None = None
-    message_count: int | None = None
-    turn_count: int | None = None
-    step_count: int | None = None
     if last_snapshot is not None:
         msgs = last_snapshot.get("messages")
         if isinstance(msgs, list):
-            message_count = len(msgs)
-            turn_count, step_count = count_turns_steps(msgs)
+            stats.message_count = len(msgs)
+            stats.turn_count, stats.step_count = count_turns_steps(msgs)
 
             u_total = aggregate_usage(msgs)
-            token_usage = {
-                "prompt_tokens": u_total.prompt_tokens,
-                "completion_tokens": u_total.completion_tokens,
-                "total_tokens": u_total.total_tokens,
-                "cached_input_tokens": u_total.cached_input_tokens,
-                "reasoning_tokens": u_total.reasoning_tokens,
-            }
+            stats.add_token_usage(
+                prompt=u_total.prompt_tokens,
+                completion=u_total.completion_tokens,
+                total=u_total.total_tokens,
+                cached=u_total.cached_input_tokens,
+                reasoning=u_total.reasoning_tokens,
+            )
             if stop_reason is None:
                 stop_reason = last_stop_reason(msgs)
             if msgs:
@@ -734,23 +739,9 @@ def _stream_json_run(
             "interrupted": interrupted,
             "stop_reason": stop_reason,
             "output": output,
-            "stats": {
-                "duration_ms": stats.duration_ms,
-                "ttft_ms": ttft_ms,
-                "chunk_count": stats.chunk_count,
-                "message_count": message_count,
-                "turn_count": turn_count,
-                "step_count": step_count,
-                "tool_call_count": len(seen_tool_calls),
-                "tool_result_count": len(seen_tool_results),
-                "tool_count": len(tool_latencies),
-                "tool_latency_ms_total": sum(tool_latencies) if tool_latencies else 0,
-                "tool_latency_ms_avg": (sum(tool_latencies) / len(tool_latencies)) if tool_latencies else None,
-                "tool_latency_ms_max": max(tool_latencies) if tool_latencies else None,
-                "token_usage": token_usage,
-            },
-            "turn_id": (turn_count - 1) if isinstance(turn_count, int) and turn_count > 0 else None,
-            "step_id": (step_count - 1) if isinstance(step_count, int) and step_count > 0 else None,
+            "stats": stats.to_dict(),
+            "turn_id": (stats.turn_count - 1) if stats.turn_count > 0 else None,
+            "step_id": (stats.step_count - 1) if stats.step_count > 0 else None,
         }
     )
 
@@ -1368,11 +1359,12 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     run_id = uuid.uuid4().hex
-    started = now_ms()
+    started_ms = now_ms()
+    stats = RunStats(started_ms=started_ms, ended_ms=started_ms)
     try:
         result = agent.run(prompt)
     except Exception as e:
-        ended = now_ms()
+        stats.ended_ms = now_ms()
         include_tb = _traceback_enabled(bool(args.include_traceback or args.stream_include_traceback))
         if args.output_format == "json":
             print(
@@ -1387,8 +1379,8 @@ def main(argv: list[str] | None = None) -> int:
                         tools=getattr(agent.config, "enabled_tools", None),
                         err=e,
                         include_traceback=include_tb,
-                        started_ms=started,
-                        ended_ms=ended,
+                        started_ms=started_ms,
+                        ended_ms=stats.ended_ms,
                     ),
                     indent=2,
                 )
@@ -1399,41 +1391,44 @@ def main(argv: list[str] | None = None) -> int:
         if include_tb:
             print(traceback.format_exc(), file=sys.stderr)
         return EXIT_ERROR
-    ended = now_ms()
+    stats.ended_ms = now_ms()
 
     # Best-effort stop_reason and token usage from the last assistant message.
     msgs = result.messages
     u_total = aggregate_usage(msgs)
-    token_usage = {
-        "prompt_tokens": u_total.prompt_tokens,
-        "completion_tokens": u_total.completion_tokens,
-        "total_tokens": u_total.total_tokens,
-        "cached_input_tokens": u_total.cached_input_tokens,
-        "reasoning_tokens": u_total.reasoning_tokens,
-    }
+    stats.add_token_usage(
+        prompt=u_total.prompt_tokens,
+        completion=u_total.completion_tokens,
+        total=u_total.total_tokens,
+        cached=u_total.cached_input_tokens,
+        reasoning=u_total.reasoning_tokens,
+    )
     stop_reason: str | None = last_stop_reason(msgs)
 
     is_interrupt = isinstance(result.raw, dict) and bool(result.raw.get("__interrupt__"))
     if stop_reason is None:
         stop_reason = "interrupt" if is_interrupt else "end_turn"
 
-    turn_count, step_count = count_turns_steps(msgs)
+    stats.message_count = len(msgs)
+    stats.turn_count, stats.step_count = count_turns_steps(msgs)
 
-    stats = {
-        "duration_ms": max(0, ended - started),
-        "started_ms": started,
-        "ended_ms": ended,
-        "permission_mode": permission_mode,
-        "message_count": len(result.messages),
-        "ttft_ms": None,
-        "stop_reason": stop_reason,
-        "token_usage": token_usage,
-        "turn_count": turn_count,
-        "step_count": step_count,
-    }
+    # Detect tool events from messages for consistent metrics
+    tool_events = detect_tool_events_from_messages(msgs)
+    for te in tool_events:
+        if te.kind == "tool_call":
+            stats.record_tool_call(te.tool_name)
+        elif te.kind == "tool_result":
+            # Detect if this is an error result
+            result_fields = extract_tool_result_fields(te)
+            is_error = (
+                result_fields.get("status") == "error"
+                or (result_fields.get("exit_code") is not None and result_fields.get("exit_code") != 0)
+            )
+            stats.record_tool_result(te.tool_name or "", latency_ms=None, is_error=is_error)
 
     # Detect HITL interrupt (LangGraph convention)
     if isinstance(result.raw, dict) and result.raw.get("__interrupt__"):
+        stats.interrupted = True
         payload = {
             "type": "interrupt",
             "run_id": run_id,
@@ -1441,7 +1436,7 @@ def main(argv: list[str] | None = None) -> int:
             "state_path": str(state_path),
             "tools": getattr(agent.config, "enabled_tools", None),
             "interrupt": _safe_json(result.raw.get("__interrupt__")),
-            "stats": stats,
+            "stats": stats.to_dict(),
             "stop_reason": "interrupt",
             "resume_hint": "kai resume --continue --approve",
         }
@@ -1463,7 +1458,7 @@ def main(argv: list[str] | None = None) -> int:
             "tools": getattr(agent.config, "enabled_tools", None),
             "stop_reason": stop_reason,
             "messages": result.messages,
-            "stats": stats,
+            "stats": stats.to_dict(),
         }
         print(json.dumps(payload, indent=2))
         return EXIT_SUCCESS
