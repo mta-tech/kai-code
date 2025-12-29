@@ -94,3 +94,20 @@ class ConversationHistoryEntry:
     role: str  # "user" or "assistant"
     summary: str
     message_id: Optional[str] = None
+
+
+@dataclass
+class ConversationHistoryMemoryBlock(MemoryBlock):
+    """Memory block for storing summarized conversation history.
+
+    Maintains a list of recent conversation entries with configurable
+    maximum size for long-term context retention.
+    """
+    max_entries: int = 50
+    entries: List[ConversationHistoryEntry] = field(default_factory=list)
+
+    def __post_init__(self):
+        if not hasattr(self, 'label'):
+            self.label = "conversation_history"
+        if not hasattr(self, 'description'):
+            self.description = "Summarized recent conversation history for context retention"
