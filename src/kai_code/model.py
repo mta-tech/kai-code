@@ -330,6 +330,21 @@ def get_model_update_args(model_identifier: str | None = None) -> dict | None:
     return info.update_args if info else None
 
 
+def get_context_limit(model_identifier: str) -> int:
+    """Get the context window limit for a model.
+
+    Args:
+        model_identifier: Model ID or handle (e.g., "sonnet-4.5" or "anthropic:claude-sonnet-4-5-20250929")
+
+    Returns:
+        Context window size in tokens. Returns DEFAULT_CONTEXT_WINDOW (128K) if unknown.
+    """
+    info = get_model_info(model_identifier)
+    if info and info.context_window:
+        return info.context_window
+    return DEFAULT_CONTEXT_WINDOW
+
+
 def refresh_models() -> list[ModelInfo]:
     """Force refresh models from APIs."""
     return models(force_refresh=True)
@@ -341,3 +356,4 @@ getDefaultModel = get_default_model
 formatAvailableModels = format_available_models
 getModelInfo = get_model_info
 getModelUpdateArgs = get_model_update_args
+getContextLimit = get_context_limit
