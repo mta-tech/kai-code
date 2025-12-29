@@ -7,7 +7,7 @@ import json
 import re
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from rich import box
 from rich.markup import escape
@@ -198,6 +198,34 @@ class TokenTracker:
             limit: The maximum context window size in tokens
         """
         self._context_limit = limit
+
+    def get_usage_percentage(self) -> float | None:
+        """Get the current context usage as a percentage.
+
+        Returns:
+            The usage percentage (0.0 to 1.0+) or None if no context limit is set
+        """
+        if self._context_limit is None or self._context_limit <= 0:
+            return None
+        return self.current_context / self._context_limit
+
+    def get_status_level(self) -> Literal["normal", "warning", "critical", "unknown"]:
+        """Get the current status level based on context usage.
+
+        Returns:
+            'unknown' - No context limit set
+            'normal' - Usage < 80% (WARNING_THRESHOLD)
+            'warning' - Usage >= 80% and < 95% (CRITICAL_THRESHOLD)
+            'critical' - Usage >= 95%
+        """
+        percentage = self.get_usage_percentage()
+        if percentage is None:
+            return "unknown"
+        if percentage >= self.CRITICAL_THRESHOLD:
+            return "critical"
+        if percentage >= self.WARNING_THRESHOLD:
+            return "warning"
+        return "normal"
 
     def set_baseline(self, tokens: int) -> None:
         """Set the baseline context token count.

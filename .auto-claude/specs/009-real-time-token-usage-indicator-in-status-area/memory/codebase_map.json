@@ -1,9 +1,9 @@
 {
   "discovered_files": {
     "src/kai_code/cli_ui.py": {
-      "description": "TokenTracker class exists with baseline_context, current_context, last_output tracking. Has set_baseline(), reset(), add(), display_last(), display_session() methods. Currently only displays on-demand via /tokens command.",
-      "category": "architecture",
-      "discovered_at": "2025-12-29T15:51:07.631084+00:00"
+      "description": "TokenTracker now has context_limit property (int | None), WARNING_THRESHOLD = 0.80 and CRITICAL_THRESHOLD = 0.95 class constants, and set_context_limit(limit: int) method. The context_limit property uses a private _context_limit backing field initialized to None.",
+      "category": "TokenTracker enhancements",
+      "discovered_at": "2025-12-29T16:09:22.583885+00:00"
     },
     "src/kai_code/rich_ui/components/status_bar.py": {
       "description": "RichStatusBar component displays model, session, and YOLO mode in a Panel. Has render() method and update methods. This is where the token indicator will be integrated.",
@@ -21,5 +21,5 @@
       "discovered_at": "2025-12-29T15:54:10.243578+00:00"
     }
   },
-  "last_updated": "2025-12-29T16:02:54.201833+00:00"
+  "last_updated": "2025-12-29T16:09:22.583897+00:00"
 }
