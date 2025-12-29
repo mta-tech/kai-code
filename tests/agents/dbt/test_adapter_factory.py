@@ -85,3 +85,63 @@ def test_get_adapter_db_extension():
     finally:
         if os.path.exists(db_path):
             os.unlink(db_path)
+
+
+def test_get_adapter_sqlite_extension():
+    """get_adapter returns SQLiteAdapter for .sqlite files."""
+    import sqlite3
+
+    with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as f:
+        db_path = f.name
+
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.close()
+
+        adapter = get_adapter(db_path)
+        assert adapter is not None
+        assert isinstance(adapter, DatabaseAdapter)
+        adapter.close()
+    finally:
+        if os.path.exists(db_path):
+            os.unlink(db_path)
+
+
+def test_get_adapter_sqlite3_extension():
+    """get_adapter returns SQLiteAdapter for .sqlite3 files."""
+    import sqlite3
+
+    with tempfile.NamedTemporaryFile(suffix=".sqlite3", delete=False) as f:
+        db_path = f.name
+
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.close()
+
+        adapter = get_adapter(db_path)
+        assert adapter is not None
+        assert isinstance(adapter, DatabaseAdapter)
+        adapter.close()
+    finally:
+        if os.path.exists(db_path):
+            os.unlink(db_path)
+
+
+def test_get_adapter_sqlite_uri():
+    """get_adapter returns SQLiteAdapter for sqlite:// URIs."""
+    import sqlite3
+
+    with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as f:
+        db_path = f.name
+
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.close()
+
+        adapter = get_adapter(f"sqlite:///{db_path}")
+        assert adapter is not None
+        assert isinstance(adapter, DatabaseAdapter)
+        adapter.close()
+    finally:
+        if os.path.exists(db_path):
+            os.unlink(db_path)
