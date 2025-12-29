@@ -6,10 +6,18 @@ Ported from letta-code memory management system.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Dict, List, Optional
 from pathlib import Path
 
-from .blocks import MemoryBlock, SkillsMemoryBlock, LoadedSkillsMemoryBlock, ProjectMemoryBlock
+from .blocks import (
+    MemoryBlock,
+    SkillsMemoryBlock,
+    LoadedSkillsMemoryBlock,
+    ProjectMemoryBlock,
+    ConversationHistoryMemoryBlock,
+    ConversationHistoryEntry,
+)
 from ..skills_parser import SkillMetadata, format_skills_for_prompt
 from ..skills_memory import parse_mdx_frontmatter
 
@@ -25,6 +33,7 @@ class MemoryManager:
         self._skills_block: Optional[SkillsMemoryBlock] = None
         self._loaded_skills_block: Optional[LoadedSkillsMemoryBlock] = None
         self._project_block: Optional[ProjectMemoryBlock] = None
+        self._history_block: Optional[ConversationHistoryMemoryBlock] = None
         self._load_default_blocks()
     
     def _load_default_blocks(self):
@@ -53,8 +62,16 @@ class MemoryManager:
             description="Project context, conventions, and important information"
         )
         self.add_block(self._project_block)
-        
-        logger.debug("Loaded default memory blocks: skills, loaded_skills, project")
+
+        # Add conversation history memory block
+        self._history_block = ConversationHistoryMemoryBlock(
+            label="conversation_history",
+            content="[CURRENTLY EMPTY]",
+            description="Summarized recent conversation history for context retention"
+        )
+        self.add_block(self._history_block)
+
+        logger.debug("Loaded default memory blocks: skills, loaded_skills, project, conversation_history")
     
     def add_block(self, block: MemoryBlock) -> None:
         """Add a memory block."""
@@ -84,7 +101,63 @@ class MemoryManager:
     def get_loaded_skills_block(self) -> Optional[LoadedSkillsMemoryBlock]:
         """Get loaded skills memory block."""
         return self._loaded_skills_block
-    
+
+    def get_history_block(self) -> Optional[ConversationHistoryMemoryBlock]:
+        """Get conversation history memory block."""
+        return self._history_block
+
+    def add_history_entry(
+        self,
+        role: str,
+        summary: str,
+        message_id: Optional[str] = None
+    ) -> None:
+        """Add a new entry to the conversation history.
+
+        Creates a ConversationHistoryEntry with current timestamp and appends it to
+        the history block. Automatically removes oldest entries when max_entries is exceeded.
+
+        Args:
+            role: The role of the message sender ("user" or "assistant")
+            summary: Condensed version of the message content
+            message_id: Optional reference ID for the original message
+        """
+        if self._history_block:
+            # Create new entry with current timestamp
+            entry = ConversationHistoryEntry(
+                timestamp=datetime.now().isoformat(),
+                role=role,
+                summary=summary,
+                message_id=message_id
+            )
+
+            # Add entry to history
+            self._history_block.entries.append(entry)
+
+            # Enforce max_entries limit by removing oldest entries
+            while len(self._history_block.entries) > self._history_block.max_entries:
+                self._history_block.entries.pop(0)
+
+            # Update the block content to reflect current history
+            self._update_history_content()
+
+            logger.debug(f"Added history entry: {role} - {summary[:50]}...")
+        else:
+            logger.error("History block not initialized")
+
+    def clear_history(self) -> None:
+        """Clear all conversation history entries.
+
+        Resets the history block to its initial empty state with content
+        set to '[CURRENTLY EMPTY]'.
+        """
+        if self._history_block:
+            self._history_block.entries.clear()
+            self._update_history_content()
+            logger.debug("Cleared conversation history")
+        else:
+            logger.error("History block not initialized")
+
     def get_skill_blocks(self) -> tuple[Optional[SkillsMemoryBlock], Optional[LoadedSkillsMemoryBlock]]:
         """Get skills-related memory blocks."""
         skills_block = self.get_skills_block()
@@ -154,7 +227,29 @@ class MemoryManager:
             content = "\n".join(lines)
         
         self.update_block_content("loaded_skills", content)
-    
+
+    def _update_history_content(self) -> None:
+        """Update the content of conversation_history block to reflect current entries.
+
+        Formats history entries as a chronological, readable string for inclusion
+        in prompts. Each entry shows timestamp, role, and summary.
+        """
+        if not self._history_block:
+            return
+
+        if not self._history_block.entries:
+            content = "[CURRENTLY EMPTY]"
+        else:
+            lines = ["[CONVERSATION HISTORY]"]
+            lines.append("")
+            for entry in self._history_block.entries:
+                # Format: [timestamp] role: summary
+                role_display = entry.role.capitalize()
+                lines.append(f"[{entry.timestamp}] {role_display}: {entry.summary}")
+            content = "\n".join(lines)
+
+        self.update_block_content("conversation_history", content)
+
     def list_loaded_skills(self) -> Dict[str, str]:
         """Get dictionary of currently loaded skills."""
         if self._loaded_skills_block:
