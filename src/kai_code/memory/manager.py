@@ -138,6 +138,9 @@ class MemoryManager:
             while len(self._history_block.entries) > self._history_block.max_entries:
                 self._history_block.entries.pop(0)
 
+            # Update the block content to reflect current history
+            self._update_history_content()
+
             logger.debug(f"Added history entry: {role} - {summary[:50]}...")
         else:
             logger.error("History block not initialized")
@@ -211,7 +214,29 @@ class MemoryManager:
             content = "\n".join(lines)
         
         self.update_block_content("loaded_skills", content)
-    
+
+    def _update_history_content(self) -> None:
+        """Update the content of conversation_history block to reflect current entries.
+
+        Formats history entries as a chronological, readable string for inclusion
+        in prompts. Each entry shows timestamp, role, and summary.
+        """
+        if not self._history_block:
+            return
+
+        if not self._history_block.entries:
+            content = "[CURRENTLY EMPTY]"
+        else:
+            lines = ["[CONVERSATION HISTORY]"]
+            lines.append("")
+            for entry in self._history_block.entries:
+                # Format: [timestamp] role: summary
+                role_display = entry.role.capitalize()
+                lines.append(f"[{entry.timestamp}] {role_display}: {entry.summary}")
+            content = "\n".join(lines)
+
+        self.update_block_content("conversation_history", content)
+
     def list_loaded_skills(self) -> Dict[str, str]:
         """Get dictionary of currently loaded skills."""
         if self._loaded_skills_block:
