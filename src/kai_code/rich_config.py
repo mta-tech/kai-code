@@ -46,6 +46,7 @@ COMMANDS = {
     "help": "Show help information",
     "model": "Select or switch model",
     "models": "List available models",
+    "quickstart": "Show Quick Start panel with key features",
     "skills": "List available skills",
     "tasks": "Show background tasks panel",
     "tokens": "Show token usage for current session",
