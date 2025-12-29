@@ -8,7 +8,8 @@ from .tool_display import ToolDisplay
 try:
     from .input_handler import RichInputHandler
     from .approval_dialog import ApprovalDialog
-    __all__ = ["RichStatusBar", "MessageDisplay", "ToolDisplay", "RichInputHandler", "ApprovalDialog"]
+    from .token_indicator import TokenUsageIndicator
+    __all__ = ["RichStatusBar", "MessageDisplay", "ToolDisplay", "RichInputHandler", "ApprovalDialog", "TokenUsageIndicator"]
 except ImportError:
     # Fall back to legacy components if new ones aren't available
     __all__ = ["RichStatusBar", "MessageDisplay", "ToolDisplay"]
