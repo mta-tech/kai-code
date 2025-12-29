@@ -6,7 +6,34 @@ from typing import Annotated
 from langchain_core.tools import tool
 
 from .manager import get_task_manager
-from .task import TaskStatus
+from .task import TaskStatus, TaskPriority
+
+
+def _parse_priority(priority_str: str | None) -> TaskPriority:
+    """Parse a priority string to TaskPriority enum.
+
+    Args:
+        priority_str: Priority string ('high', 'normal', 'low') or None.
+
+    Returns:
+        TaskPriority enum value.
+
+    Raises:
+        ValueError: If priority_str is not a valid priority value.
+    """
+    if priority_str is None:
+        return TaskPriority.NORMAL
+
+    mapping = {
+        "high": TaskPriority.HIGH,
+        "normal": TaskPriority.NORMAL,
+        "low": TaskPriority.LOW,
+    }
+    priority_lower = priority_str.lower()
+    if priority_lower not in mapping:
+        valid = ", ".join(mapping.keys())
+        raise ValueError(f"Invalid priority '{priority_str}'. Must be one of: {valid}")
+    return mapping[priority_lower]
 
 
 @tool
@@ -132,6 +159,7 @@ def kill_background_task(task_id: Annotated[str, "The ID of the task to kill"]) 
 def run_background_shell(
     command: Annotated[str, "The shell command to run in the background"],
     description: Annotated[str | None, "Optional description of the task"] = None,
+    priority: Annotated[str | None, "Task priority: 'high', 'normal', or 'low'"] = None,
 ) -> str:
     """Run a shell command in the background.
 
@@ -141,12 +169,14 @@ def run_background_shell(
     Args:
         command: The shell command to execute.
         description: Optional description for the task.
+        priority: Task priority ('high', 'normal', 'low'). Defaults to 'normal'.
 
     Returns:
         The task ID.
     """
     manager = get_task_manager()
-    task_id = manager.run_shell(command)
+    task_priority = _parse_priority(priority)
+    task_id = manager.run_shell(command, priority=task_priority)
     if description:
         task = manager.get_task(task_id)
         if task:
@@ -158,6 +188,7 @@ def run_background_shell(
 def run_background_agent(
     prompt: Annotated[str, "The prompt to send to the background agent"],
     description: Annotated[str | None, "Optional description of the task"] = None,
+    priority: Annotated[str | None, "Task priority: 'high', 'normal', or 'low'"] = None,
 ) -> str:
     """Run an agent task in the background.
 
@@ -167,12 +198,14 @@ def run_background_agent(
     Args:
         prompt: The prompt for the agent.
         description: Optional description for the task.
+        priority: Task priority ('high', 'normal', 'low'). Defaults to 'normal'.
 
     Returns:
         The task ID.
     """
     manager = get_task_manager()
-    task_id = manager.run_agent(prompt)
+    task_priority = _parse_priority(priority)
+    task_id = manager.run_agent(prompt, priority=task_priority)
     if description:
         task = manager.get_task(task_id)
         if task:
