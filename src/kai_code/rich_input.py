@@ -6,8 +6,10 @@ Adapted from deepagents-cli for kai-code.
 import asyncio
 import os
 import re
+import shutil
 import time
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from prompt_toolkit import PromptSession
@@ -22,7 +24,7 @@ from prompt_toolkit.enums import EditingMode
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.key_binding import KeyBindings
 
-from .rich_config import COLORS, COMMANDS, SessionState, console
+from .rich_config import COLORS, COMMANDS, SessionState, ShortcutContext, console
 from .image_utils import ImageData, get_clipboard_image
 
 # Type for background task callback
@@ -33,6 +35,309 @@ AT_MENTION_RE = re.compile(r"@(?P<path>(?:[^\s@]|(?<=\\)\s)*)$")
 SLASH_COMMAND_RE = re.compile(r"^/(?P<command>[a-z]*)$")
 
 EXIT_CONFIRM_WINDOW = 3.0
+
+
+@dataclass
+class InputState:
+    """Represents the current state of the input buffer for contextual hints.
+
+    This dataclass captures the state of user input to enable contextual
+    keyboard shortcut hints in the bottom toolbar. Each field maps to a
+    ShortcutContext enum value for filtering which shortcuts to display.
+
+    Attributes:
+        has_text: True if the input buffer contains any text (maps to HAS_INPUT).
+        is_multi_line: True if the input contains newline characters (maps to MULTI_LINE).
+        cursor_in_middle: True if cursor is not at the end of text (maps to EDITING).
+        completion_active: True if the completion menu is visible (maps to COMPLETION_ACTIVE).
+        text_length: Length of the current input text.
+        line_count: Number of lines in the current input.
+        has_at_mention: True if the input contains an @ file mention.
+    """
+
+    has_text: bool = False
+    is_multi_line: bool = False
+    cursor_in_middle: bool = False
+    completion_active: bool = False
+    text_length: int = 0
+    line_count: int = 1
+    has_at_mention: bool = False
+
+    def matches_context(self, context: ShortcutContext) -> bool:
+        """Check if the current input state matches a shortcut context.
+
+        Args:
+            context: The ShortcutContext to check against.
+
+        Returns:
+            True if the current state satisfies the context requirement.
+        """
+        if context == ShortcutContext.ALWAYS:
+            return True
+        elif context == ShortcutContext.HAS_INPUT:
+            return self.has_text
+        elif context == ShortcutContext.MULTI_LINE:
+            return self.is_multi_line
+        elif context == ShortcutContext.EDITING:
+            return self.cursor_in_middle
+        elif context == ShortcutContext.COMPLETION_ACTIVE:
+            return self.completion_active
+        return False
+
+
+@dataclass
+class ToolbarSegment:
+    """Represents a segment of the toolbar with priority for truncation.
+
+    Toolbar segments are used to build the bottom toolbar content with
+    prioritization support. When the total width exceeds terminal width,
+    lower-priority segments are truncated first.
+
+    Attributes:
+        parts: List of (style_class, text) tuples for prompt_toolkit.
+        priority: Display priority (1=highest, higher numbers=lower priority).
+                  Priority 1-2: Critical (model, status)
+                  Priority 3: Contextual hints
+                  Priority 4-5: General hints
+        include_separator: Whether this segment includes a leading separator.
+    """
+
+    parts: list[tuple[str, str]] = field(default_factory=list)
+    priority: int = 5
+    include_separator: bool = True
+
+    @property
+    def width(self) -> int:
+        """Calculate the display width of this segment.
+
+        Returns:
+            Total character width of all text parts in this segment.
+        """
+        return sum(len(text) for _, text in self.parts)
+
+    def get_parts_with_separator(self) -> list[tuple[str, str]]:
+        """Get parts with optional leading separator.
+
+        Returns:
+            Parts with " | " prepended if include_separator is True.
+        """
+        if self.include_separator and self.parts:
+            return [("", " | ")] + self.parts
+        return self.parts
+
+    @property
+    def total_width(self) -> int:
+        """Calculate total width including separator if applicable.
+
+        Returns:
+            Total width including separator (" | " = 3 chars) if needed.
+        """
+        base_width = self.width
+        if self.include_separator and self.parts:
+            base_width += 3  # " | " is 3 characters
+        return base_width
+
+
+def calculate_toolbar_width(segments: list[ToolbarSegment]) -> int:
+    """Calculate total width of all toolbar segments.
+
+    Args:
+        segments: List of ToolbarSegment objects.
+
+    Returns:
+        Total character width of all segments combined.
+    """
+    total = 0
+    for i, segment in enumerate(segments):
+        if i == 0:
+            # First segment doesn't need separator
+            total += segment.width
+        else:
+            total += segment.total_width
+    return total
+
+
+def get_terminal_width() -> int:
+    """Get the current terminal width.
+
+    Returns:
+        Terminal width in columns, defaults to 80 if detection fails.
+    """
+    try:
+        return shutil.get_terminal_size().columns
+    except (AttributeError, ValueError):
+        return 80  # Fallback to standard width
+
+
+def truncate_toolbar_segments(
+    segments: list[ToolbarSegment], max_width: int
+) -> list[tuple[str, str]]:
+    """Truncate toolbar segments to fit within max_width.
+
+    Segments are sorted by priority (lower number = higher priority).
+    Lower-priority segments are removed first when space is limited.
+
+    Priority order:
+    1. Model display (priority 1)
+    2. Status indicators like BASH MODE, auto-approve (priority 2)
+    3. Contextual hints like ESC ESC cancel (priority 3)
+    4. General hints like Ctrl+E editor (priority 4-5)
+
+    Args:
+        segments: List of ToolbarSegment objects to display.
+        max_width: Maximum width in characters (terminal width).
+
+    Returns:
+        Flattened list of (style_class, text) tuples that fit within max_width.
+    """
+    if not segments:
+        return []
+
+    # Sort segments by priority (lower number = higher priority)
+    sorted_segments = sorted(segments, key=lambda s: s.priority)
+
+    # Build result by adding segments until we exceed max_width
+    result_segments: list[ToolbarSegment] = []
+    current_width = 0
+
+    for segment in sorted_segments:
+        # Calculate width this segment would add
+        if not result_segments:
+            # First segment doesn't need separator
+            segment_width = segment.width
+        else:
+            segment_width = segment.total_width
+
+        # Check if adding this segment would exceed max_width
+        # Leave some buffer (5 chars) for safety
+        if current_width + segment_width <= max_width - 5:
+            result_segments.append(segment)
+            current_width += segment_width
+
+    # Re-sort by original order for display (we want model first, then status, etc.)
+    # Since we sorted by priority, just flatten in that order
+    result: list[tuple[str, str]] = []
+    for i, segment in enumerate(result_segments):
+        if i == 0:
+            result.extend(segment.parts)
+        else:
+            result.extend(segment.get_parts_with_separator())
+
+    return result
+
+
+def format_shortcut_hint(
+    key: str, display: str, include_separator: bool = True
+) -> list[tuple[str, str]]:
+    """Format a keyboard shortcut hint with consistent styling.
+
+    Formats shortcut hints for the bottom toolbar with distinct styles for
+    the key combination and description text. This ensures visual consistency
+    across all shortcut hints displayed in the toolbar.
+
+    Args:
+        key: The key combination string (e.g., "Ctrl+E", "ESC ESC").
+        display: The short description (e.g., "editor", "cancel").
+        include_separator: Whether to include a leading separator " | ".
+
+    Returns:
+        List of (style_class, text) tuples for prompt_toolkit formatted text.
+        Example: [("", " | "), ("class:toolbar-key", "Ctrl+E"), ("", " "),
+                  ("class:toolbar-shortcut", "editor")]
+    """
+    parts: list[tuple[str, str]] = []
+
+    # Add separator if requested (for chaining multiple hints)
+    if include_separator:
+        parts.append(("", " | "))
+
+    # Key combination with distinct styling (e.g., "Ctrl+E")
+    parts.append(("class:toolbar-key", key))
+
+    # Space between key and description
+    parts.append(("", " "))
+
+    # Description with subdued styling (e.g., "editor")
+    parts.append(("class:toolbar-shortcut", display))
+
+    return parts
+
+
+def format_shortcut_from_registry(
+    shortcut_id: str, include_separator: bool = True
+) -> list[tuple[str, str]]:
+    """Format a shortcut hint from the KEYBOARD_SHORTCUTS registry.
+
+    Convenience function to format a shortcut by its registry ID,
+    looking up the key and display text automatically.
+
+    Args:
+        shortcut_id: The shortcut identifier in KEYBOARD_SHORTCUTS (e.g., "ctrl_e").
+        include_separator: Whether to include a leading separator " | ".
+
+    Returns:
+        List of (style_class, text) tuples, or empty list if shortcut not found.
+    """
+    from .rich_config import KEYBOARD_SHORTCUTS
+
+    shortcut = KEYBOARD_SHORTCUTS.get(shortcut_id)
+    if not shortcut:
+        return []
+
+    return format_shortcut_hint(
+        key=shortcut["key"],
+        display=shortcut["display"],
+        include_separator=include_separator,
+    )
+
+
+def detect_input_state(session: PromptSession | None) -> InputState:
+    """Detect the current input state from a PromptSession.
+
+    Examines the session's buffer to determine the current input state,
+    enabling contextual display of keyboard shortcut hints.
+
+    Args:
+        session: The active PromptSession, or None if unavailable.
+
+    Returns:
+        InputState with detected values, or default empty state if session is None.
+    """
+    if session is None:
+        return InputState()
+
+    try:
+        buffer = session.default_buffer
+        text = buffer.text
+        cursor_position = buffer.cursor_position
+
+        # Calculate state values
+        has_text = len(text.strip()) > 0
+        is_multi_line = "\n" in text
+        text_length = len(text)
+        line_count = text.count("\n") + 1
+
+        # Cursor is in middle if not at the end of the text
+        cursor_in_middle = cursor_position < text_length
+
+        # Check if completion menu is active
+        completion_active = buffer.complete_state is not None
+
+        # Check for @ file mentions (e.g., @path/to/file)
+        has_at_mention = AT_MENTION_RE.search(text) is not None or "@" in text
+
+        return InputState(
+            has_text=has_text,
+            is_multi_line=is_multi_line,
+            cursor_in_middle=cursor_in_middle,
+            completion_active=completion_active,
+            text_length=text_length,
+            line_count=line_count,
+            has_at_mention=has_at_mention,
+        )
+    except (AttributeError, TypeError):
+        # Silently return default state if session is not fully initialized
+        return InputState()
 
 
 class ImageTracker:
@@ -189,45 +494,73 @@ def parse_image_placeholders(text: str) -> tuple[str, int]:
 def get_bottom_toolbar(
     session_state: SessionState, session_ref: dict
 ) -> Callable[[], list[tuple[str, str]]]:
-    """Return toolbar function that shows auto-approve status, BASH MODE, model, and background tasks."""
+    """Return toolbar function that shows auto-approve status, BASH MODE, model, and background tasks.
+
+    The toolbar detects the current input state to enable contextual keyboard
+    shortcut hints based on whether there is text, multi-line input, cursor
+    position, and completion menu state.
+
+    Smart truncation is applied when content exceeds terminal width.
+    Priority order (highest to lowest):
+    1. Model display (priority 1)
+    2. Status indicators - BASH MODE, auto-approve, exit hint, tasks (priority 2)
+    3. Contextual hints - ESC ESC cancel (priority 3)
+    4. General hints - Ctrl+B background, Ctrl+E editor (priority 4-5)
+    """
 
     def toolbar() -> list[tuple[str, str]]:
-        parts = []
+        segments: list[ToolbarSegment] = []
 
-        # Show current model
+        # Detect current input state for contextual hints
+        session = session_ref.get("session")
+        input_state = detect_input_state(session)
+
+        # Get terminal width for truncation
+        terminal_width = get_terminal_width()
+
+        # === Priority 1: Model display (highest priority) ===
         if hasattr(session_state, 'model') and session_state.model:
             try:
                 from .model_selector import format_current_model
                 model_display = format_current_model(session_state.model)
                 if model_display:
-                    parts.append(("class:toolbar-model", f" {model_display} "))
-                    parts.append(("", " | "))
+                    segments.append(ToolbarSegment(
+                        parts=[("class:toolbar-model", f" {model_display} ")],
+                        priority=1,
+                        include_separator=False,  # First segment, no separator
+                    ))
             except ImportError:
                 pass
 
-        # Check if we're in BASH mode (input starts with !)
+        # === Priority 2: Status indicators ===
+
+        # BASH mode indicator (critical - tells user they're in shell mode)
         try:
-            session = session_ref.get("session")
             if session:
                 current_text = session.default_buffer.text
                 if current_text.startswith("!"):
-                    parts.append(("bg:#ff1493 fg:#ffffff bold", " BASH MODE "))
-                    parts.append(("", " | "))
+                    segments.append(ToolbarSegment(
+                        parts=[("bg:#ff1493 fg:#ffffff bold", " BASH MODE ")],
+                        priority=2,
+                        include_separator=True,
+                    ))
         except (AttributeError, TypeError):
-            # Silently ignore - toolbar is non-critical and called frequently
             pass
 
-        # Show background task count if any
+        # Background task count
         try:
             from .tasks import format_task_status_line
             task_status = format_task_status_line()
             if task_status:
-                parts.append(("class:toolbar-task", f" {task_status} "))
-                parts.append(("", " | "))
+                segments.append(ToolbarSegment(
+                    parts=[("class:toolbar-task", f" {task_status} ")],
+                    priority=2,
+                    include_separator=True,
+                ))
         except ImportError:
             pass
 
-        # Base status message
+        # Auto-approve status (critical user feedback)
         if session_state.auto_approve:
             base_msg = "auto-accept ON (CTRL+T to toggle)"
             base_class = "class:toolbar-green"
@@ -235,23 +568,75 @@ def get_bottom_toolbar(
             base_msg = "manual accept (CTRL+T to toggle)"
             base_class = "class:toolbar-orange"
 
-        parts.append((base_class, base_msg))
+        segments.append(ToolbarSegment(
+            parts=[(base_class, base_msg)],
+            priority=2,
+            include_separator=True,
+        ))
 
-        # Show Ctrl+B hint
-        parts.append(("", " | "))
-        parts.append(("class:toolbar-hint", "CTRL+B background"))
-
-        # Show exit confirmation hint if active
+        # Exit confirmation hint (critical when active)
         hint_until = session_state.exit_hint_until
         if hint_until is not None:
             now = time.monotonic()
             if now < hint_until:
-                parts.append(("", " | "))
-                parts.append(("class:toolbar-exit", " Ctrl+C again to exit "))
+                segments.append(ToolbarSegment(
+                    parts=[("class:toolbar-exit", " Ctrl+C again to exit ")],
+                    priority=2,  # High priority when active
+                    include_separator=True,
+                ))
             else:
                 session_state.exit_hint_until = None
 
-        return parts
+        # === Priority 3: Contextual hints (based on input state) ===
+
+        # When input has text: show ESC ESC cancel
+        if input_state.has_text:
+            shortcut_parts = format_shortcut_from_registry("double_esc", include_separator=False)
+            if shortcut_parts:
+                segments.append(ToolbarSegment(
+                    parts=shortcut_parts,
+                    priority=3,
+                    include_separator=True,
+                ))
+
+        # Show Alt+Enter newline hint contextually when user might want multi-line input:
+        # - When already multi-line (user is writing multiple lines)
+        # - When @ file is mentioned (likely writing a longer prompt about the file)
+        # - When user has typed text (might want to add additional context on new lines)
+        wants_multiline_hint = (
+            input_state.is_multi_line
+            or input_state.has_at_mention
+            or input_state.has_text
+        )
+        if wants_multiline_hint:
+            shortcut_parts = format_shortcut_from_registry("alt_enter", include_separator=False)
+            if shortcut_parts:
+                segments.append(ToolbarSegment(
+                    parts=shortcut_parts,
+                    priority=3,
+                    include_separator=True,
+                ))
+
+        # === Priority 4-5: General hints ===
+
+        # Ctrl+B background hint
+        segments.append(ToolbarSegment(
+            parts=[("class:toolbar-hint", "CTRL+B background")],
+            priority=4,
+            include_separator=True,
+        ))
+
+        # Ctrl+E editor hint (always show - powerful hidden feature)
+        shortcut_parts = format_shortcut_from_registry("ctrl_e", include_separator=False)
+        if shortcut_parts:
+            segments.append(ToolbarSegment(
+                parts=shortcut_parts,
+                priority=5,
+                include_separator=True,
+            ))
+
+        # Apply smart truncation based on terminal width
+        return truncate_toolbar_segments(segments, terminal_width)
 
     return toolbar
 
@@ -495,6 +880,8 @@ def create_prompt_session(
             "toolbar-task": "bg:#8b5cf6 #ffffff",  # Purple for background tasks
             "toolbar-model": "bg:#3b82f6 #ffffff",  # Blue for current model
             "toolbar-hint": "#6b7280",  # Dim gray for hints
+            "toolbar-key": "#94a3b8 bold",  # Brighter gray bold for shortcut keys
+            "toolbar-shortcut": "#64748b",  # Slate gray for shortcut descriptions
         }
     )
 
