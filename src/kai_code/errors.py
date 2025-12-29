@@ -175,3 +175,299 @@ class ActionableErrorException(Exception):
 
     def __str__(self) -> str:
         return str(self.error)
+
+
+class ErrorRenderer:
+    """Renders ActionableError instances as Rich console output.
+
+    This class formats ActionableError into visually appealing Rich console
+    output with colored sections for error header, explanation, suggestions,
+    recovery commands, and related items.
+
+    The styling matches existing Rich UI patterns in the kai-code codebase.
+
+    Example:
+        renderer = ErrorRenderer()
+        renderer.render(error)
+
+        # Or render to a string (for testing or custom output)
+        output = renderer.render_to_string(error)
+    """
+
+    # Color scheme matching rich_config.py COLORS
+    COLORS = {
+        "error": "red",
+        "warning": "yellow",
+        "info": "blue",
+        "primary": "#10b981",
+        "dim": "#6b7280",
+        "suggestion": "cyan",
+        "command": "#fbbf24",  # tool color
+        "related": "magenta",
+    }
+
+    # Icons for different severity levels
+    ICONS = {
+        "error": "✗",
+        "warning": "⚠",
+        "info": "ℹ",
+    }
+
+    def __init__(self, console: "Console | None" = None) -> None:
+        """Initialize the ErrorRenderer.
+
+        Args:
+            console: Rich Console instance. If None, creates a new one.
+        """
+        if console is None:
+            from rich.console import Console
+
+            console = Console(highlight=False)
+        self._console = console
+
+    @property
+    def console(self) -> "Console":
+        """Get the Rich console instance."""
+        return self._console
+
+    def render(self, error: ActionableError) -> None:
+        """Render an ActionableError to the console.
+
+        Args:
+            error: The ActionableError to render.
+        """
+        from rich import box
+        from rich.panel import Panel
+        from rich.text import Text
+
+        # Build the content
+        content = self._build_content(error)
+
+        # Determine border color based on severity
+        border_color = self.COLORS.get(error.severity, self.COLORS["error"])
+
+        # Build the header title
+        icon = self.ICONS.get(error.severity, self.ICONS["error"])
+        error_type_display = error.error_type.value.replace("_", " ").title()
+        title = f"{icon} {error_type_display}"
+
+        # Create and print the panel
+        panel = Panel(
+            content,
+            title=f"[bold {border_color}]{title}[/bold {border_color}]",
+            border_style=border_color,
+            box=box.ROUNDED,
+            padding=(0, 1),
+        )
+
+        self._console.print()
+        self._console.print(panel)
+        self._console.print()
+
+    def render_to_string(self, error: ActionableError) -> str:
+        """Render an ActionableError to a string.
+
+        Useful for testing or when you need the output as a string.
+
+        Args:
+            error: The ActionableError to render.
+
+        Returns:
+            The rendered error as a string with ANSI escape codes.
+        """
+        from io import StringIO
+
+        from rich.console import Console
+
+        string_io = StringIO()
+        temp_console = Console(file=string_io, force_terminal=True, highlight=False)
+        temp_renderer = ErrorRenderer(console=temp_console)
+        temp_renderer.render(error)
+        return string_io.getvalue()
+
+    def render_to_text(self, error: ActionableError) -> "Text":
+        """Render an ActionableError to a Rich Text object.
+
+        Useful for embedding the error in other Rich renderables.
+
+        Args:
+            error: The ActionableError to render.
+
+        Returns:
+            A Rich Text object containing the formatted error.
+        """
+        return self._build_content(error)
+
+    def _build_content(self, error: ActionableError) -> "Text":
+        """Build the Rich Text content for an error.
+
+        Args:
+            error: The ActionableError to format.
+
+        Returns:
+            A Rich Text object with the formatted content.
+        """
+        from rich.text import Text
+
+        content = Text()
+
+        # Main error message
+        severity_color = self.COLORS.get(error.severity, self.COLORS["error"])
+        content.append(error.message, style=f"bold {severity_color}")
+        content.append("\n")
+
+        # Suggestions section
+        if error.has_suggestions():
+            content.append("\n")
+            content.append("💡 ", style="bold")
+            content.append("Suggestions:", style=f"bold {self.COLORS['suggestion']}")
+            content.append("\n")
+            for suggestion in error.suggestions:
+                content.append("   • ", style=self.COLORS["dim"])
+                content.append(suggestion, style=self.COLORS["suggestion"])
+                content.append("\n")
+
+        # Recovery commands section
+        if error.has_recovery_commands():
+            content.append("\n")
+            content.append("🔧 ", style="bold")
+            content.append("Try these commands:", style=f"bold {self.COLORS['command']}")
+            content.append("\n")
+            for command in error.recovery_commands:
+                content.append("   $ ", style=self.COLORS["dim"])
+                content.append(command, style=f"bold {self.COLORS['command']}")
+                content.append("\n")
+
+        # Related items section
+        if error.has_related_items():
+            content.append("\n")
+            content.append("🔍 ", style="bold")
+            content.append("Did you mean:", style=f"bold {self.COLORS['related']}")
+            content.append("\n")
+            for item in error.related_items:
+                content.append("   → ", style=self.COLORS["dim"])
+                content.append(item, style=f"bold {self.COLORS['related']}")
+                content.append("\n")
+
+        # Context information (if any)
+        if error.context:
+            content.append("\n")
+            content.append("📋 ", style="bold")
+            content.append("Context:", style=f"bold {self.COLORS['dim']}")
+            content.append("\n")
+            for key, value in error.context.items():
+                content.append(f"   {key}: ", style=self.COLORS["dim"])
+                content.append(value, style="dim italic")
+                content.append("\n")
+
+        # Remove trailing newline
+        if content.plain.endswith("\n"):
+            content = Text(content.plain.rstrip("\n"))
+            # Re-apply styles by rebuilding
+            content = self._build_content_no_trailing(error)
+
+        return content
+
+    def _build_content_no_trailing(self, error: ActionableError) -> "Text":
+        """Build content without trailing newline.
+
+        Args:
+            error: The ActionableError to format.
+
+        Returns:
+            A Rich Text object with the formatted content (no trailing newline).
+        """
+        from rich.text import Text
+
+        content = Text()
+
+        # Main error message
+        severity_color = self.COLORS.get(error.severity, self.COLORS["error"])
+        content.append(error.message, style=f"bold {severity_color}")
+
+        # Suggestions section
+        if error.has_suggestions():
+            content.append("\n\n")
+            content.append("💡 ", style="bold")
+            content.append("Suggestions:", style=f"bold {self.COLORS['suggestion']}")
+            for i, suggestion in enumerate(error.suggestions):
+                content.append("\n")
+                content.append("   • ", style=self.COLORS["dim"])
+                content.append(suggestion, style=self.COLORS["suggestion"])
+
+        # Recovery commands section
+        if error.has_recovery_commands():
+            content.append("\n\n")
+            content.append("🔧 ", style="bold")
+            content.append("Try these commands:", style=f"bold {self.COLORS['command']}")
+            for command in error.recovery_commands:
+                content.append("\n")
+                content.append("   $ ", style=self.COLORS["dim"])
+                content.append(command, style=f"bold {self.COLORS['command']}")
+
+        # Related items section
+        if error.has_related_items():
+            content.append("\n\n")
+            content.append("🔍 ", style="bold")
+            content.append("Did you mean:", style=f"bold {self.COLORS['related']}")
+            for item in error.related_items:
+                content.append("\n")
+                content.append("   → ", style=self.COLORS["dim"])
+                content.append(item, style=f"bold {self.COLORS['related']}")
+
+        # Context information (if any)
+        if error.context:
+            content.append("\n\n")
+            content.append("📋 ", style="bold")
+            content.append("Context:", style=f"bold {self.COLORS['dim']}")
+            for key, value in error.context.items():
+                content.append("\n")
+                content.append(f"   {key}: ", style=self.COLORS["dim"])
+                content.append(value, style="dim italic")
+
+        return content
+
+    def render_simple(self, error: ActionableError) -> None:
+        """Render an ActionableError as simple inline text (without panel).
+
+        Useful for less intrusive error display in some contexts.
+
+        Args:
+            error: The ActionableError to render.
+        """
+        severity_color = self.COLORS.get(error.severity, self.COLORS["error"])
+        icon = self.ICONS.get(error.severity, self.ICONS["error"])
+
+        # Main message
+        self._console.print(f"[{severity_color}]{icon} {error.message}[/{severity_color}]")
+
+        # Suggestions (inline)
+        if error.has_suggestions():
+            for suggestion in error.suggestions:
+                self._console.print(
+                    f"  [dim]•[/dim] [{self.COLORS['suggestion']}]{suggestion}[/{self.COLORS['suggestion']}]"
+                )
+
+        # Related items (inline)
+        if error.has_related_items():
+            items_str = ", ".join(error.related_items[:3])  # Limit to 3
+            if len(error.related_items) > 3:
+                items_str += ", ..."
+            self._console.print(
+                f"  [dim]Did you mean:[/dim] [{self.COLORS['related']}]{items_str}[/{self.COLORS['related']}]"
+            )
+
+
+# Convenience function for quick rendering
+def render_error(error: ActionableError, console: "Console | None" = None) -> None:
+    """Render an ActionableError to the console.
+
+    This is a convenience function that creates an ErrorRenderer and renders
+    the error. For multiple errors, create an ErrorRenderer instance directly.
+
+    Args:
+        error: The ActionableError to render.
+        console: Optional Rich Console instance.
+    """
+    renderer = ErrorRenderer(console=console)
+    renderer.render(error)
