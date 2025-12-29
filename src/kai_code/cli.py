@@ -372,13 +372,6 @@ def _stream_json_run(
             _emit_jsonl(payload)
 
     stop_reason: str | None = None
-    token_usage: dict[str, int | None] = {
-        "prompt_tokens": None,
-        "completion_tokens": None,
-        "total_tokens": None,
-        "cached_input_tokens": None,
-        "reasoning_tokens": None,
-    }
 
     _emit(
         {
@@ -700,23 +693,20 @@ def _stream_json_run(
         open_turn_id = None
 
     output: str | None = None
-    message_count: int | None = None
-    turn_count: int | None = None
-    step_count: int | None = None
     if last_snapshot is not None:
         msgs = last_snapshot.get("messages")
         if isinstance(msgs, list):
-            message_count = len(msgs)
-            turn_count, step_count = count_turns_steps(msgs)
+            stats.message_count = len(msgs)
+            stats.turn_count, stats.step_count = count_turns_steps(msgs)
 
             u_total = aggregate_usage(msgs)
-            token_usage = {
-                "prompt_tokens": u_total.prompt_tokens,
-                "completion_tokens": u_total.completion_tokens,
-                "total_tokens": u_total.total_tokens,
-                "cached_input_tokens": u_total.cached_input_tokens,
-                "reasoning_tokens": u_total.reasoning_tokens,
-            }
+            stats.add_token_usage(
+                prompt=u_total.prompt_tokens,
+                completion=u_total.completion_tokens,
+                total=u_total.total_tokens,
+                cached=u_total.cached_input_tokens,
+                reasoning=u_total.reasoning_tokens,
+            )
             if stop_reason is None:
                 stop_reason = last_stop_reason(msgs)
             if msgs:
@@ -749,24 +739,9 @@ def _stream_json_run(
             "interrupted": interrupted,
             "stop_reason": stop_reason,
             "output": output,
-            "stats": {
-                "duration_ms": stats.duration_ms,
-                "ttft_ms": stats.ttft_ms,
-                "chunk_count": stats.chunk_count,
-                "message_count": message_count,
-                "turn_count": turn_count,
-                "step_count": step_count,
-                "tool_call_count": stats.tool_call_count,
-                "tool_result_count": stats.tool_result_count,
-                "tool_error_count": stats.tool_error_count,
-                "tool_count": len(stats.tool_names),
-                "tool_latency_ms_total": stats.tool_latency_total_ms,
-                "tool_latency_ms_avg": (stats.tool_latency_total_ms / stats.tool_result_count) if stats.tool_result_count > 0 and stats.tool_latency_total_ms > 0 else None,
-                "tool_latency_ms_max": stats.tool_latency_max_ms if stats.tool_latency_max_ms > 0 else None,
-                "token_usage": token_usage,
-            },
-            "turn_id": (turn_count - 1) if isinstance(turn_count, int) and turn_count > 0 else None,
-            "step_id": (step_count - 1) if isinstance(step_count, int) and step_count > 0 else None,
+            "stats": stats.to_dict(),
+            "turn_id": (stats.turn_count - 1) if stats.turn_count > 0 else None,
+            "step_id": (stats.step_count - 1) if stats.step_count > 0 else None,
         }
     )
 
