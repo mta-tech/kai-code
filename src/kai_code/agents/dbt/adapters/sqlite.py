@@ -77,7 +77,47 @@ class SQLiteAdapter(DatabaseAdapter):
 
     def get_columns(self, table: str) -> list[ColumnInfo]:
         """Get columns for a specific table."""
-        raise NotImplementedError("get_columns not yet implemented")
+        # Parse schema.table format
+        if "." in table:
+            schema, table_name = table.split(".", 1)
+        else:
+            schema = "main"
+            table_name = table
+
+        # Use PRAGMA table_info to get column metadata
+        # Returns: (cid, name, type, notnull, dflt_value, pk)
+        cursor = self._conn.execute(f'PRAGMA table_info("{table_name}")')
+        rows = cursor.fetchall()
+
+        columns = []
+        for row in rows:
+            cid, col_name, data_type, notnull, dflt_value, pk = row
+
+            # Check cardinality for potential low-cardinality columns
+            is_low_card = False
+            categories = None
+            if data_type.upper() in ("VARCHAR", "TEXT", "CHAR", "STRING"):
+                try:
+                    card = self.get_cardinality(table, col_name)
+                    is_low_card = card.is_low_cardinality
+                    categories = card.sample_values if is_low_card else None
+                except Exception:
+                    pass
+
+            columns.append(
+                ColumnInfo(
+                    name=col_name,
+                    data_type=data_type,
+                    description=None,  # SQLite doesn't have column comments
+                    is_nullable=notnull == 0,  # notnull=0 means nullable
+                    is_primary_key=pk == 1,  # pk=1 means primary key
+                    foreign_key=None,  # TODO: Parse FK constraints
+                    is_low_cardinality=is_low_card,
+                    categories=categories,
+                )
+            )
+
+        return columns
 
     def get_cardinality(self, table: str, column: str) -> CardinalityInfo:
         """Get distinct value count and samples for a column."""
