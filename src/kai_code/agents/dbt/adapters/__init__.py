@@ -32,11 +32,7 @@ def get_adapter(connection_string: str) -> DatabaseAdapter:
     Raises:
         ValueError: If the connection string format is not supported.
     """
-    # Check for DuckDB file path (ends with .duckdb or .db)
-    if connection_string.endswith((".duckdb", ".db")):
-        return DuckDBAdapter(connection_string)
-
-    # Check for DuckDB URI
+    # Check for DuckDB URI first (before file extensions, since URIs can end with file extensions)
     if connection_string.startswith("duckdb://"):
         # Extract path from URI (duckdb:///path/to/file)
         path = connection_string.replace("duckdb://", "")
@@ -44,11 +40,7 @@ def get_adapter(connection_string: str) -> DatabaseAdapter:
             path = path[1:]  # Remove leading slash for absolute paths
         return DuckDBAdapter(path)
 
-    # Check for SQLite file path (ends with .sqlite or .sqlite3)
-    if connection_string.endswith((".sqlite", ".sqlite3")):
-        return SQLiteAdapter(connection_string)
-
-    # Check for SQLite URI
+    # Check for SQLite URI first (before file extensions, since URIs can end with file extensions)
     if connection_string.startswith("sqlite://"):
         # Extract path from URI (sqlite:///path/to/file)
         path = connection_string.replace("sqlite://", "")
@@ -60,6 +52,16 @@ def get_adapter(connection_string: str) -> DatabaseAdapter:
     if connection_string.startswith(("postgresql://", "postgres://")):
         return PostgreSQLAdapter(connection_string)
 
+    # Check for DuckDB file path (ends with .duckdb or .db)
+    if connection_string.endswith((".duckdb", ".db")):
+        return DuckDBAdapter(connection_string)
+
+    # Check for SQLite file path (ends with .sqlite or .sqlite3)
+    if connection_string.endswith((".sqlite", ".sqlite3")):
+        return SQLiteAdapter(connection_string)
+
+    # All URI schemes should be checked before file extensions to prevent
+    # URIs ending with valid file extensions from being mishandled
     raise ValueError(
         f"Unsupported database connection string: {connection_string}. "
         "Supported formats: *.duckdb, duckdb://, *.sqlite, *.sqlite3, sqlite://, postgresql://"
