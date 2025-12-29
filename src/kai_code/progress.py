@@ -6,9 +6,11 @@ progress during execution, enabling enhanced status display in the CLI.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
+import threading
+from contextlib import contextmanager
+from dataclasses import asdict, dataclass, field
 from enum import Enum
-from typing import Any, Callable
+from typing import Any, Callable, Generator
 
 
 class ProgressPhase(str, Enum):
@@ -148,3 +150,168 @@ class ToolProgress:
 # Type alias for progress callback function that tools can call
 # to report their current progress during execution
 ProgressCallback = Callable[[ToolProgress], None]
+
+
+class ProgressManager:
+    """Thread-safe manager for progress reporting during tool execution.
+
+    This singleton class holds the current progress callback and provides
+    methods for tools to report their progress. It supports scoped progress
+    reporting via context managers, allowing rich_execution.py to receive
+    progress updates in real-time.
+
+    Thread Safety:
+        All operations are protected by a lock to ensure safe concurrent
+        access from multiple tool executions.
+
+    Usage:
+        # In rich_execution.py - set up the callback
+        manager = get_progress_manager()
+        manager.set_callback(lambda p: status.update(p.status_message))
+
+        # In tool implementations - report progress
+        manager = get_progress_manager()
+        manager.report(ToolProgress(
+            tool_name="web_search",
+            status_message="Connecting to API...",
+            phase=ProgressPhase.CONNECTING
+        ))
+
+        # Using context manager for scoped progress
+        with manager.progress_scope(callback_fn):
+            # Progress reports within this scope use callback_fn
+            manager.report(progress)
+    """
+
+    def __init__(self) -> None:
+        """Initialize the ProgressManager with no callback set."""
+        self._lock = threading.Lock()
+        self._callback: ProgressCallback | None = None
+        self._callback_stack: list[ProgressCallback | None] = []
+
+    def set_callback(self, callback: ProgressCallback | None) -> None:
+        """Set the progress callback function.
+
+        Args:
+            callback: Function to call when progress is reported, or None
+                to disable progress reporting.
+        """
+        with self._lock:
+            self._callback = callback
+
+    def clear_callback(self) -> None:
+        """Clear the current progress callback.
+
+        After calling this, progress reports will be silently ignored
+        until a new callback is set.
+        """
+        with self._lock:
+            self._callback = None
+
+    def get_callback(self) -> ProgressCallback | None:
+        """Get the current progress callback.
+
+        Returns:
+            The current callback function, or None if not set.
+        """
+        with self._lock:
+            return self._callback
+
+    def report(self, progress: ToolProgress) -> None:
+        """Report progress to the current callback.
+
+        If no callback is set, the progress is silently ignored.
+        This method is thread-safe.
+
+        Args:
+            progress: The progress information to report.
+        """
+        with self._lock:
+            callback = self._callback
+        # Call callback outside the lock to avoid potential deadlocks
+        if callback is not None:
+            try:
+                callback(progress)
+            except Exception:
+                # Silently ignore callback errors to avoid disrupting tool execution
+                pass
+
+    @contextmanager
+    def progress_scope(
+        self, callback: ProgressCallback | None
+    ) -> Generator[None, None, None]:
+        """Context manager for scoped progress reporting.
+
+        Temporarily sets the progress callback for the duration of the
+        context. When the context exits, the previous callback is restored.
+        This allows nested progress scopes with different callbacks.
+
+        Args:
+            callback: The callback to use within this scope, or None to
+                disable progress reporting in this scope.
+
+        Yields:
+            None - the context manager doesn't produce a value.
+
+        Example:
+            with manager.progress_scope(my_callback):
+                # Progress reports go to my_callback
+                manager.report(progress1)
+
+                with manager.progress_scope(other_callback):
+                    # Progress reports go to other_callback
+                    manager.report(progress2)
+
+                # Back to my_callback
+                manager.report(progress3)
+        """
+        with self._lock:
+            self._callback_stack.append(self._callback)
+            self._callback = callback
+        try:
+            yield
+        finally:
+            with self._lock:
+                if self._callback_stack:
+                    self._callback = self._callback_stack.pop()
+                else:
+                    self._callback = None
+
+
+# Module-level singleton instance
+_progress_manager: ProgressManager | None = None
+_manager_lock = threading.Lock()
+
+
+def get_progress_manager() -> ProgressManager:
+    """Get the singleton ProgressManager instance.
+
+    This function is thread-safe and will create the manager on first call.
+
+    Returns:
+        The singleton ProgressManager instance.
+
+    Example:
+        manager = get_progress_manager()
+        manager.set_callback(my_progress_handler)
+        manager.report(ToolProgress(tool_name="test", status_message="Working..."))
+    """
+    global _progress_manager
+    if _progress_manager is None:
+        with _manager_lock:
+            # Double-check pattern for thread safety
+            if _progress_manager is None:
+                _progress_manager = ProgressManager()
+    return _progress_manager
+
+
+def reset_progress_manager() -> None:
+    """Reset the singleton ProgressManager instance.
+
+    This is primarily useful for testing to ensure a clean state
+    between tests. In production code, the singleton should persist
+    for the lifetime of the application.
+    """
+    global _progress_manager
+    with _manager_lock:
+        _progress_manager = None
