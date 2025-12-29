@@ -289,6 +289,85 @@ _VALID_CONFIG_KEYS = {
     "disallowedCommands",
 }
 
+# Expected types for each setting field
+# Keys that expect string values
+_STRING_KEYS = {
+    "default_model",
+    "defaultModel",
+    "default_toolset",
+    "defaultToolset",
+    "permission_mode",
+    "permissionMode",
+}
+
+# Keys that expect list of strings
+_LIST_KEYS = {
+    "allowed_tools",
+    "allowedTools",
+    "disallowed_tools",
+    "disallowedTools",
+    "allowed_commands",
+    "allowedCommands",
+    "disallowed_commands",
+    "disallowedCommands",
+}
+
+
+def validate_settings_dict(data: dict[str, Any]) -> list[str]:
+    """Validate that a settings dict contains only valid KaiSettings fields with correct types.
+
+    Validates that:
+    - All keys are valid KaiSettings configuration fields (snake_case or camelCase)
+    - Session-specific fields (last_session, agents) are not present
+    - Value types match expected types (strings or lists of strings)
+
+    Args:
+        data: Dictionary of settings to validate.
+
+    Returns:
+        A list of validation error messages. Empty list if all valid.
+    """
+    errors: list[str] = []
+
+    if not isinstance(data, dict):
+        return ["Settings must be a dictionary"]
+
+    for key, value in data.items():
+        # Check for session-specific fields
+        if key in _SESSION_FIELDS:
+            errors.append(f"Cannot import session-specific field: {key}")
+            continue
+
+        # Check for unknown keys
+        if key not in _VALID_CONFIG_KEYS:
+            errors.append(f"Unknown settings key: {key}")
+            continue
+
+        # Skip None values (they're valid but will be filtered)
+        if value is None:
+            continue
+
+        # Validate string fields
+        if key in _STRING_KEYS:
+            if not isinstance(value, str):
+                errors.append(f"Field '{key}' must be a string, got {type(value).__name__}")
+            elif not value.strip():
+                errors.append(f"Field '{key}' cannot be an empty string")
+
+        # Validate list fields
+        elif key in _LIST_KEYS:
+            if isinstance(value, str):
+                # Strings are acceptable for list fields (will be split by comma)
+                pass
+            elif isinstance(value, list):
+                for i, item in enumerate(value):
+                    if not isinstance(item, str):
+                        errors.append(f"Field '{key}' item {i} must be a string, got {type(item).__name__}")
+            else:
+                errors.append(f"Field '{key}' must be a list of strings or comma-separated string, got {type(value).__name__}")
+
+    return errors
+
 
 def import_settings(input_path: Path, target: str, root_dir: Path) -> tuple[bool, str]:
     """Import settings from a JSON file to a target settings file.
@@ -323,15 +402,10 @@ def import_settings(input_path: Path, target: str, root_dir: Path) -> tuple[bool
     except Exception as e:
         return False, f"Failed to read input file: {e}"
 
-    # Validate keys
-    invalid_keys = set(input_data.keys()) - _VALID_CONFIG_KEYS
-    if invalid_keys:
-        return False, f"Invalid settings keys: {', '.join(sorted(invalid_keys))}"
-
-    # Reject session-specific fields if present
-    session_keys_present = set(input_data.keys()) & _SESSION_FIELDS
-    if session_keys_present:
-        return False, f"Cannot import session-specific fields: {', '.join(sorted(session_keys_present))}"
+    # Validate settings using helper function
+    validation_errors = validate_settings_dict(input_data)
+    if validation_errors:
+        return False, f"Invalid settings: {'; '.join(validation_errors)}"
 
     # No settings to import
     if not input_data:
