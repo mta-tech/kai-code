@@ -1,4 +1,5 @@
 """kai-dbt CLI - Data Engineering Agent Entry Point."""
+
 from __future__ import annotations
 
 import argparse
@@ -12,13 +13,14 @@ from rich.console import Console
 from .banner import DBT_ASCII_BANNER, create_startup_info, format_schema_summary
 from .config import DbtCliConfig, load_config, find_dbt_project
 from .commands import DbtCommandHandler
+from kai_code.rich_config import COLORS
 
 if TYPE_CHECKING:
     from .agent import DbtAgent
     from .adapters import DatabaseAdapter
     from langgraph.graph.state import CompiledStateGraph
 
-console = Console()
+console = Console(highlight=False)
 
 __all__ = ["parse_args", "main", "cli_main"]
 
@@ -45,7 +47,8 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "-y", "--yes",
+        "-y",
+        "--yes",
         action="store_true",
         dest="auto_approve",
         help="Auto-approve all tool actions (dangerous, use with caution)",
@@ -110,7 +113,16 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "-v", "--version",
+        "-m",
+        "--model",
+        type=str,
+        default=None,
+        help="Model to use (e.g., sonnet-4, gpt-4o, gemini-2.0-flash)",
+    )
+
+    parser.add_argument(
+        "-v",
+        "--version",
         action="store_true",
         help="Show version information",
     )
@@ -119,6 +131,43 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         "--help-commands",
         action="store_true",
         help="Show available slash commands",
+    )
+
+    # Ralph autonomous loop flags
+    parser.add_argument(
+        "--ralph",
+        action="store_true",
+        help="Enable Ralph autonomous loop mode",
+    )
+
+    parser.add_argument(
+        "--ralph-promise",
+        "--completion-promise",
+        dest="ralph_promise",
+        type=str,
+        default=None,
+        help="Exact string to detect completion (e.g., TESTS_PASS)",
+    )
+
+    parser.add_argument(
+        "--ralph-max-iterations",
+        type=int,
+        default=50,
+        help="Maximum iterations before stopping (default: 50)",
+    )
+
+    parser.add_argument(
+        "--ralph-timeout",
+        type=int,
+        default=None,
+        help="Wall-clock timeout in seconds (optional)",
+    )
+
+    parser.add_argument(
+        "--ralph-token-limit",
+        type=int,
+        default=500_000,
+        help="Maximum total tokens to use (default: 500000)",
     )
 
     return parser.parse_args(args)
@@ -135,6 +184,7 @@ def _show_help_commands() -> None:
         ("/dbt compile [model]", "Compile dbt models"),
         ("/dbt list", "List dbt resources"),
         ("/dbt show <model>", "Preview model output"),
+        ("/brainstorm [topic]", "Start a design brainstorm session"),
         ("/help", "Show this help"),
         ("/exit", "Exit kai-dbt"),
     ]
@@ -162,8 +212,8 @@ def _show_startup_banner(
     if no_splash:
         return
 
-    # Show ASCII banner
-    console.print(DBT_ASCII_BANNER, style="cyan")
+    # Show ASCII banner (same color scheme as kai-code)
+    console.print(DBT_ASCII_BANNER, style=f"bold {COLORS['primary']}")
 
     # Get database info
     db_connected = adapter is not None
@@ -220,6 +270,7 @@ def _create_dbt_agent(
     profile: str | None = None,
     target: str | None = None,
     yolo: bool = False,
+    model: str | None = None,
 ) -> tuple["DbtAgent", "CompiledStateGraph"]:
     """Create DbtAgent instance.
 
@@ -229,6 +280,7 @@ def _create_dbt_agent(
         profile: dbt profile name.
         target: dbt target.
         yolo: Auto-approve mode.
+        model: Model name to use (e.g., sonnet-4, gpt-4o).
 
     Returns:
         Tuple of (DbtAgent, compiled graph).
@@ -236,9 +288,12 @@ def _create_dbt_agent(
     from .agent import DbtAgent
     from kai_code.model import get_default_model, resolve_model
 
-    # Get model
-    default_model = get_default_model()
-    model_string = resolve_model(default_model)
+    # Get model - use provided or default
+    if model:
+        model_string = resolve_model(model)
+    else:
+        default_model = get_default_model()
+        model_string = resolve_model(default_model)
 
     # Create agent
     agent = DbtAgent(
@@ -269,24 +324,19 @@ async def dbt_cli_loop(
         initial_prompt: Optional initial prompt.
         auto_approve: Auto-approve mode.
     """
-    from prompt_toolkit import PromptSession
-    from prompt_toolkit.styles import Style
-
     from kai_code.rich_execution import execute_task
     from kai_code.rich_config import SessionState
     from kai_code.cli_ui import TokenTracker
-    from kai_code.rich_input import ImageTracker
+    from kai_code.rich_input import ImageTracker, create_prompt_session
 
     command_handler = DbtCommandHandler(agent)
     session_state = SessionState(auto_approve=auto_approve)
     token_tracker = TokenTracker()
     image_tracker = ImageTracker()
 
-    # Create styled prompt session
-    style = Style.from_dict({
-        "prompt": "cyan bold",
-    })
-    prompt_session: PromptSession[str] = PromptSession(style=style)
+    prompt_session = create_prompt_session(
+        "kai-dbt", session_state, image_tracker=image_tracker
+    )
 
     # Handle initial prompt
     if initial_prompt:
@@ -315,7 +365,6 @@ async def dbt_cli_loop(
             if not user_input:
                 continue
 
-            # Handle slash commands
             if user_input.startswith("/"):
                 if user_input == "/exit" or user_input == "/quit":
                     console.print("Goodbye!", style="dim")
@@ -324,13 +373,46 @@ async def dbt_cli_loop(
                 result = command_handler.handle(user_input)
                 if result:
                     console.print(result)
-                else:
-                    console.print(f"Unknown command: {user_input}", style="yellow")
-                continue
+                    continue
+
+                from kai_code.rich_commands import handle_command
+
+                fallback_result = handle_command(user_input, agent, token_tracker)
+                if fallback_result == "exit":
+                    console.print("Goodbye!", style="dim")
+                    break
+                if fallback_result == "model_select":
+                    # Handle interactive model selection
+                    from kai_code.model_selector import show_model_selector, format_current_model
+
+                    selected = show_model_selector(current_model=session_state.model)
+                    if selected and selected.handle != session_state.model:
+                        console.print(f"[dim]Switching to model: {selected.id}[/dim]")
+                        try:
+                            project_dir = getattr(agent, 'dbt_project_dir', None) or Path.cwd()
+                            db_conn = getattr(agent, '_db_connection', None)
+                            new_agent, new_graph = _create_dbt_agent(
+                                project_dir=project_dir,
+                                db_connection=db_conn,
+                                yolo=session_state.auto_approve,
+                                model=selected.id,
+                            )
+                            # Update references for next iteration
+                            agent = new_agent
+                            graph = new_graph
+                            session_state.model = selected.handle
+                            console.print(f"[green]Model switched to: {format_current_model(selected.handle)}[/green]")
+                        except Exception as e:
+                            console.print(f"[red]Failed to switch model: {e}[/red]")
+                    continue
+                if fallback_result is None:
+                    continue
+                user_input = fallback_result
 
             # Handle bash commands (starting with !)
             if user_input.startswith("!"):
                 from kai_code.rich_commands import execute_bash_command
+
                 execute_bash_command(user_input)
                 continue
 
@@ -371,6 +453,7 @@ def main(args: list[str] | None = None) -> int:
     if parsed.version:
         try:
             from kai_code import __version__
+
             console.print(f"kai-dbt {__version__}")
         except ImportError:
             console.print("kai-dbt (development)")
@@ -416,11 +499,14 @@ def main(args: list[str] | None = None) -> int:
             profile=profile,
             target=target,
             yolo=parsed.auto_approve,
+            model=parsed.model,
         )
     except Exception as e:
         # Warn and continue without db if connection failed
         if config.connection:
-            console.print(f"[yellow]Warning: Could not connect to database: {e}[/yellow]")
+            console.print(
+                f"[yellow]Warning: Could not connect to database: {e}[/yellow]"
+            )
             console.print("[yellow]Continuing without database connection.[/yellow]")
             try:
                 agent, graph = _create_dbt_agent(
@@ -429,6 +515,7 @@ def main(args: list[str] | None = None) -> int:
                     profile=profile,
                     target=target,
                     yolo=parsed.auto_approve,
+                    model=parsed.model,
                 )
             except Exception as e2:
                 console.print(f"[red]Error creating agent: {e2}[/red]")
@@ -449,14 +536,40 @@ def main(args: list[str] | None = None) -> int:
     # Get initial prompt
     initial_prompt = " ".join(parsed.prompt) if parsed.prompt else None
 
+    # Handle Ralph mode - activate loop before running CLI
+    if parsed.ralph:
+        from kai_code.rich_config import COLORS
+
+        # Start Ralph loop
+        agent.ralph_manager.start_loop(
+            prompt=initial_prompt or "Continue working on the dbt project",
+            completion_promise=parsed.ralph_promise,
+            max_iterations=parsed.ralph_max_iterations,
+            timeout_seconds=parsed.ralph_timeout,
+            token_limit=parsed.ralph_token_limit,
+        )
+
+        console.print()
+        console.print("⟳ [bold cyan]Ralph autonomous loop activated![/bold cyan]")
+        console.print(f"[dim]Prompt: {agent.ralph_manager.get_prompt()}[/dim]")
+        if parsed.ralph_promise:
+            console.print(f"[dim]Completion promise: {parsed.ralph_promise}[/dim]")
+        console.print(f"[dim]Max iterations: {parsed.ralph_max_iterations}[/dim]")
+        if parsed.ralph_timeout:
+            console.print(f"[dim]Timeout: {parsed.ralph_timeout}s[/dim]")
+        console.print(f"[dim]Token limit: {parsed.ralph_token_limit:,}[/dim]")
+        console.print()
+
     # Run CLI
     try:
-        asyncio.run(dbt_cli_loop(
-            agent=agent,
-            graph=graph,
-            initial_prompt=initial_prompt,
-            auto_approve=parsed.auto_approve,
-        ))
+        asyncio.run(
+            dbt_cli_loop(
+                agent=agent,
+                graph=graph,
+                initial_prompt=initial_prompt,
+                auto_approve=parsed.auto_approve,
+            )
+        )
         return 0
     except KeyboardInterrupt:
         console.print("\nGoodbye!", style="dim")
