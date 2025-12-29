@@ -145,6 +145,19 @@ class MemoryManager:
         else:
             logger.error("History block not initialized")
 
+    def clear_history(self) -> None:
+        """Clear all conversation history entries.
+
+        Resets the history block to its initial empty state with content
+        set to '[CURRENTLY EMPTY]'.
+        """
+        if self._history_block:
+            self._history_block.entries.clear()
+            self._update_history_content()
+            logger.debug("Cleared conversation history")
+        else:
+            logger.error("History block not initialized")
+
     def get_skill_blocks(self) -> tuple[Optional[SkillsMemoryBlock], Optional[LoadedSkillsMemoryBlock]]:
         """Get skills-related memory blocks."""
         skills_block = self.get_skills_block()
