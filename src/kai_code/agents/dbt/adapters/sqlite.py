@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import Any
 
 from kai_code.agents.dbt.adapters.base import DatabaseAdapter
 from kai_code.agents.dbt.models import (
@@ -173,7 +172,34 @@ class SQLiteAdapter(DatabaseAdapter):
 
     def execute_query(self, sql: str, limit: int = 100) -> QueryResult:
         """Execute a read-only SQL query."""
-        raise NotImplementedError("execute_query not yet implemented")
+        try:
+            cursor = self._conn.execute(sql)
+            result = cursor.fetchall()
+
+            columns = [desc[0] for desc in cursor.description] if cursor.description else []
+
+            truncated = len(result) > limit
+            result = result[:limit]
+
+            rows = [dict(zip(columns, row)) for row in result]
+
+            return QueryResult(
+                success=True,
+                columns=columns,
+                rows=rows,
+                row_count=len(rows),
+                truncated=truncated,
+                error=None,
+            )
+        except Exception as e:
+            return QueryResult(
+                success=False,
+                columns=[],
+                rows=[],
+                row_count=0,
+                truncated=False,
+                error=str(e),
+            )
 
     def close(self) -> None:
         """Close the database connection."""
