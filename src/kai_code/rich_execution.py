@@ -38,6 +38,8 @@ from kai_code.cli_ui import (
     render_file_operation,
     render_todo_list,
 )
+from kai_code.progress import ToolProgress, get_progress_manager
+from kai_code.rich_status import create_enhanced_status
 
 _HITL_REQUEST_ADAPTER = TypeAdapter(HITLRequest)
 
@@ -257,9 +259,20 @@ async def execute_task(
     captured_output_tokens = 0
     current_todos = None  # Track current todo list state
 
-    status = console.status(f"[bold {COLORS['thinking']}]Agent is thinking...", spinner="dots")
+    # Create enhanced status display that supports progress updates
+    status = create_enhanced_status(console, "Agent is thinking...")
     status.start()
     spinner_active = True
+
+    # Set up progress callback to update status in real-time
+    progress_manager = get_progress_manager()
+
+    def on_progress(progress: ToolProgress) -> None:
+        """Callback to update status display when tools report progress."""
+        if spinner_active:
+            status.update_from_progress(progress)
+
+    progress_manager.set_callback(on_progress)
 
     tool_icons = {
         "read_file": "[",
@@ -405,7 +418,7 @@ async def execute_task(
 
                         # Reset spinner message after tool completes
                         if spinner_active:
-                            status.update(f"[bold {COLORS['thinking']}]Agent is thinking...")
+                            status.reset_to_default()
 
                         if tool_name in ("shell", "execute") and tool_status != "success":
                             flush_text_buffer(final=True)
@@ -662,6 +675,7 @@ async def execute_task(
                         status.stop()
                         spinner_active = False
 
+                    progress_manager.clear_callback()
                     console.print("[yellow]Command rejected.[/yellow]", style="bold")
                     console.print("Tell the agent what you'd like to do differently.")
                     console.print()
@@ -678,6 +692,7 @@ async def execute_task(
         # Event loop cancelled the task (e.g. Ctrl+C during streaming) - clean up and return
         if spinner_active:
             status.stop()
+        progress_manager.clear_callback()
         console.print("\n[yellow]Interrupted by user[/yellow]")
         console.print("Updating agent state...", style="dim")
 
@@ -700,6 +715,7 @@ async def execute_task(
         # User pressed Ctrl+C - clean up and exit gracefully
         if spinner_active:
             status.stop()
+        progress_manager.clear_callback()
         console.print("\n[yellow]Interrupted by user[/yellow]")
         console.print("Updating agent state...", style="dim")
 
@@ -721,6 +737,9 @@ async def execute_task(
 
     if spinner_active:
         status.stop()
+
+    # Clear progress callback to prevent stale updates
+    progress_manager.clear_callback()
 
     if has_responded:
         console.print()
