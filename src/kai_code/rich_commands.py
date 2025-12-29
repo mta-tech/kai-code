@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Callable
 from kai_code.rich_config import console, COLORS, rich_settings
 from kai_code.cli_ui import TokenTracker, show_interactive_help
 from kai_code.skills import discover_skills_legacy
+from kai_code.settings import export_settings
 
 if TYPE_CHECKING:
     from kai_code.model import ModelInfo
@@ -89,6 +90,11 @@ def handle_command(
 
     if command in ("/ralph-status", "/ralph"):
         _show_ralph_status(agent)
+        return None
+
+    # Settings export command
+    if command == "/export-settings" or command.startswith("/export-settings "):
+        _handle_export_settings(command_input)
         return None
 
     # Unknown command - let it pass through as regular input
@@ -425,4 +431,34 @@ def _show_ralph_status(agent) -> None:
 
     console.print()
     console.print("[dim]Use /cancel-ralph to stop the loop.[/dim]")
+    console.print()
+
+
+def _handle_export_settings(command_input: str) -> None:
+    """Handle /export-settings [filename] command.
+
+    Exports current merged settings to a JSON file.
+
+    Args:
+        command_input: The full command string
+    """
+    # Parse optional filename argument
+    parts = command_input.strip().split(maxsplit=1)
+    if len(parts) > 1:
+        filename = parts[1]
+    else:
+        filename = "kai-settings.json"
+
+    # Determine root directory and output path
+    root_dir = rich_settings.project_root or Path.cwd()
+    output_path = root_dir / filename
+
+    # Export settings
+    success, message = export_settings(root_dir, output_path)
+
+    console.print()
+    if success:
+        console.print(f"[green]✓ {message}[/green]")
+    else:
+        console.print(f"[red]✗ {message}[/red]")
     console.print()
