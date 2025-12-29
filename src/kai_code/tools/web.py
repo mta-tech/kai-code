@@ -8,6 +8,7 @@ from typing import Any, Literal
 import requests
 from markdownify import markdownify
 
+from kai_code.progress import ProgressPhase, ToolProgress, get_progress_manager
 from kai_code.rich_config import rich_settings
 
 
@@ -119,6 +120,17 @@ def web_search(
     4. Cite sources by mentioning the page titles or URLs
     5. NEVER show the raw JSON to the user - always provide a formatted response
     """
+    progress_manager = get_progress_manager()
+
+    # Report starting phase
+    progress_manager.report(
+        ToolProgress(
+            tool_name="web_search",
+            status_message=f'Searching for "{query}"...',
+            phase=ProgressPhase.STARTING,
+        )
+    )
+
     if not rich_settings.has_tavily:
         return {
             "error": "Tavily API key not configured. Please set TAVILY_API_KEY environment variable.",
@@ -128,13 +140,43 @@ def web_search(
     try:
         from tavily import TavilyClient
 
+        # Report connecting phase
+        progress_manager.report(
+            ToolProgress(
+                tool_name="web_search",
+                status_message="Connecting to Tavily search...",
+                phase=ProgressPhase.CONNECTING,
+            )
+        )
+
         client = TavilyClient(api_key=rich_settings.tavily_api_key)
-        return client.search(
+        result = client.search(
             query,
             max_results=max_results,
             include_raw_content=include_raw_content,
             topic=topic,
         )
+
+        # Report processing phase with result count
+        num_results = len(result.get("results", [])) if isinstance(result, dict) else 0
+        progress_manager.report(
+            ToolProgress(
+                tool_name="web_search",
+                status_message=f"Processing {num_results} results...",
+                phase=ProgressPhase.PROCESSING,
+            )
+        )
+
+        # Report complete phase
+        progress_manager.report(
+            ToolProgress(
+                tool_name="web_search",
+                status_message=f"Found {num_results} results",
+                phase=ProgressPhase.COMPLETE,
+            )
+        )
+
+        return result
     except Exception as e:
         return {"error": f"Web search error: {e!s}", "query": query}
 
