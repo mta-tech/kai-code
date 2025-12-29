@@ -407,6 +407,18 @@ def get_bottom_toolbar(
         parts.append(("", " | "))
         parts.append(("class:toolbar-hint", "CTRL+B background"))
 
+        # Add contextual shortcut hints based on input state
+        # Always show: Ctrl+E editor (powerful hidden feature)
+        parts.extend(format_shortcut_from_registry("ctrl_e", include_separator=True))
+
+        # When input has text: show ESC ESC cancel
+        if input_state.has_text:
+            parts.extend(format_shortcut_from_registry("double_esc", include_separator=True))
+
+        # When multi-line input: show Alt+Enter newline hint
+        if input_state.is_multi_line:
+            parts.extend(format_shortcut_from_registry("alt_enter", include_separator=True))
+
         # Show exit confirmation hint if active
         hint_until = session_state.exit_hint_until
         if hint_until is not None:
