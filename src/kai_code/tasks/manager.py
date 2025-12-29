@@ -156,6 +156,7 @@ class TaskManager:
             return
         self._initialized = True
         self._tasks: dict[str, Task] = {}
+        self._pending_queue: PriorityTaskQueue = PriorityTaskQueue()
         self._executor = ThreadPoolExecutor(max_workers=self.MAX_CONCURRENT_TASKS)
         self._callbacks: list[Callable[[Task], None]] = []
         self._root_dir = Path.cwd()
@@ -216,6 +217,42 @@ class TaskManager:
         task._thread.start()
 
         return task.id
+
+    def _available_slots(self) -> int:
+        """Return the number of available slots for running tasks.
+
+        Calculates available capacity by subtracting currently running tasks
+        from MAX_CONCURRENT_TASKS limit.
+
+        Returns:
+            Number of available slots for new tasks.
+        """
+        running_count = sum(
+            1 for task in self._tasks.values()
+            if task.status == TaskStatus.RUNNING
+        )
+        return max(0, self.MAX_CONCURRENT_TASKS - running_count)
+
+    def _process_queue(self) -> None:
+        """Process the pending queue and start tasks when slots are available.
+
+        Dequeues highest-priority tasks from the pending queue and starts them
+        until no more slots are available or the queue is empty.
+        """
+        while self._available_slots() > 0 and self._pending_queue:
+            task = self._pending_queue.pop()
+            if task is None:
+                break
+
+            # Start the task
+            def run_and_notify(t: Task = task):
+                try:
+                    t.run()
+                finally:
+                    self._notify_completion(t)
+
+            task._thread = threading.Thread(target=run_and_notify, daemon=True)
+            task._thread.start()
 
     def _notify_completion(self, task: Task) -> None:
         """Notify callbacks when a task completes."""
