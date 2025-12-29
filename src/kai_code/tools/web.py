@@ -8,6 +8,7 @@ from typing import Any, Literal
 import requests
 from markdownify import markdownify
 
+from kai_code.progress import ProgressPhase, ToolProgress, get_progress_manager
 from kai_code.rich_config import rich_settings
 
 
@@ -32,6 +33,23 @@ def http_request(
     Returns:
         Dictionary with response data including status, headers, and content
     """
+    from urllib.parse import urlparse
+
+    progress_manager = get_progress_manager()
+
+    # Extract host from URL for progress display
+    parsed_url = urlparse(url)
+    host = parsed_url.netloc or url[:50]
+
+    # Report starting phase - connecting to host
+    progress_manager.report(
+        ToolProgress(
+            tool_name="http_request",
+            status_message=f"Connecting to {host}...",
+            phase=ProgressPhase.STARTING,
+        )
+    )
+
     try:
         kwargs = {"url": url, "method": method.upper(), "timeout": timeout}
 
@@ -45,12 +63,39 @@ def http_request(
             else:
                 kwargs["data"] = data
 
+        # Report connecting phase - sending request
+        progress_manager.report(
+            ToolProgress(
+                tool_name="http_request",
+                status_message=f"{method.upper()} {url}...",
+                phase=ProgressPhase.CONNECTING,
+            )
+        )
+
         response = requests.request(**kwargs)
+
+        # Report downloading phase - receiving response
+        progress_manager.report(
+            ToolProgress(
+                tool_name="http_request",
+                status_message=f"Downloading response ({response.status_code})...",
+                phase=ProgressPhase.DOWNLOADING,
+            )
+        )
 
         try:
             content = response.json()
         except Exception:
             content = response.text
+
+        # Report complete phase
+        progress_manager.report(
+            ToolProgress(
+                tool_name="http_request",
+                status_message=f"Request complete ({response.status_code})",
+                phase=ProgressPhase.COMPLETE,
+            )
+        )
 
         return {
             "success": response.status_code < 400,
@@ -61,6 +106,14 @@ def http_request(
         }
 
     except requests.exceptions.Timeout:
+        # Report timeout error
+        progress_manager.report(
+            ToolProgress(
+                tool_name="http_request",
+                status_message=f"Request timed out after {timeout}s",
+                phase=ProgressPhase.COMPLETE,
+            )
+        )
         return {
             "success": False,
             "status_code": 0,
@@ -69,6 +122,14 @@ def http_request(
             "url": url,
         }
     except requests.exceptions.RequestException as e:
+        # Report request error
+        progress_manager.report(
+            ToolProgress(
+                tool_name="http_request",
+                status_message=f"Request error: {type(e).__name__}",
+                phase=ProgressPhase.COMPLETE,
+            )
+        )
         return {
             "success": False,
             "status_code": 0,
@@ -77,6 +138,14 @@ def http_request(
             "url": url,
         }
     except Exception as e:
+        # Report general error
+        progress_manager.report(
+            ToolProgress(
+                tool_name="http_request",
+                status_message=f"Error: {type(e).__name__}",
+                phase=ProgressPhase.COMPLETE,
+            )
+        )
         return {
             "success": False,
             "status_code": 0,
@@ -119,6 +188,17 @@ def web_search(
     4. Cite sources by mentioning the page titles or URLs
     5. NEVER show the raw JSON to the user - always provide a formatted response
     """
+    progress_manager = get_progress_manager()
+
+    # Report starting phase
+    progress_manager.report(
+        ToolProgress(
+            tool_name="web_search",
+            status_message=f'Searching for "{query}"...',
+            phase=ProgressPhase.STARTING,
+        )
+    )
+
     if not rich_settings.has_tavily:
         return {
             "error": "Tavily API key not configured. Please set TAVILY_API_KEY environment variable.",
@@ -128,13 +208,43 @@ def web_search(
     try:
         from tavily import TavilyClient
 
+        # Report connecting phase
+        progress_manager.report(
+            ToolProgress(
+                tool_name="web_search",
+                status_message="Connecting to Tavily search...",
+                phase=ProgressPhase.CONNECTING,
+            )
+        )
+
         client = TavilyClient(api_key=rich_settings.tavily_api_key)
-        return client.search(
+        result = client.search(
             query,
             max_results=max_results,
             include_raw_content=include_raw_content,
             topic=topic,
         )
+
+        # Report processing phase with result count
+        num_results = len(result.get("results", [])) if isinstance(result, dict) else 0
+        progress_manager.report(
+            ToolProgress(
+                tool_name="web_search",
+                status_message=f"Processing {num_results} results...",
+                phase=ProgressPhase.PROCESSING,
+            )
+        )
+
+        # Report complete phase
+        progress_manager.report(
+            ToolProgress(
+                tool_name="web_search",
+                status_message=f"Found {num_results} results",
+                phase=ProgressPhase.COMPLETE,
+            )
+        )
+
+        return result
     except Exception as e:
         return {"error": f"Web search error: {e!s}", "query": query}
 
@@ -164,6 +274,17 @@ def fetch_url(url: str, timeout: int = 30) -> dict[str, Any]:
     3. Synthesize this into a clear, natural language response
     4. NEVER show the raw markdown to the user unless specifically requested
     """
+    progress_manager = get_progress_manager()
+
+    # Report starting phase - fetching URL
+    progress_manager.report(
+        ToolProgress(
+            tool_name="fetch_url",
+            status_message=f"Fetching {url}...",
+            phase=ProgressPhase.STARTING,
+        )
+    )
+
     try:
         response = requests.get(
             url,
@@ -172,8 +293,26 @@ def fetch_url(url: str, timeout: int = 30) -> dict[str, Any]:
         )
         response.raise_for_status()
 
+        # Report processing phase - converting HTML to markdown
+        progress_manager.report(
+            ToolProgress(
+                tool_name="fetch_url",
+                status_message="Converting HTML to markdown...",
+                phase=ProgressPhase.PROCESSING,
+            )
+        )
+
         # Convert HTML content to markdown
         markdown_content = markdownify(response.text)
+
+        # Report complete phase with content length
+        progress_manager.report(
+            ToolProgress(
+                tool_name="fetch_url",
+                status_message=f"Processed {len(markdown_content)} characters",
+                phase=ProgressPhase.COMPLETE,
+            )
+        )
 
         return {
             "url": str(response.url),
@@ -181,5 +320,33 @@ def fetch_url(url: str, timeout: int = 30) -> dict[str, Any]:
             "status_code": response.status_code,
             "content_length": len(markdown_content),
         }
+    except requests.exceptions.Timeout:
+        # Report timeout error
+        progress_manager.report(
+            ToolProgress(
+                tool_name="fetch_url",
+                status_message=f"Request timed out after {timeout}s",
+                phase=ProgressPhase.COMPLETE,
+            )
+        )
+        return {"error": f"Fetch URL error: Request timed out after {timeout} seconds", "url": url}
+    except requests.exceptions.RequestException as e:
+        # Report request error
+        progress_manager.report(
+            ToolProgress(
+                tool_name="fetch_url",
+                status_message=f"Request error: {type(e).__name__}",
+                phase=ProgressPhase.COMPLETE,
+            )
+        )
+        return {"error": f"Fetch URL error: {e!s}", "url": url}
     except Exception as e:
+        # Report general error
+        progress_manager.report(
+            ToolProgress(
+                tool_name="fetch_url",
+                status_message=f"Error: {type(e).__name__}",
+                phase=ProgressPhase.COMPLETE,
+            )
+        )
         return {"error": f"Fetch URL error: {e!s}", "url": url}
