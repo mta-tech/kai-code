@@ -107,8 +107,9 @@
           "files": [
             "src/kai_code/tasks/manager.py"
           ],
-          "status": "pending",
-          "notes": ""
+          "status": "completed",
+          "notes": "Updated _notify_completion to call _process_queue() after notifying callbacks. When a task completes, this automatically starts the next highest-priority queued task if slots are available. Updated docstring to reflect this behavior. Committed in 9987012.",
+          "updated_at": "2025-12-29T16:44:48.983120+00:00"
         }
       ]
     },
@@ -262,5 +263,5 @@
     "tests_passed": "",
     "issues": ""
   },
-  "last_updated": "2025-12-29T16:40:17.393898+00:00"
+  "last_updated": "2025-12-29T16:44:48.983141+00:00"
 }
