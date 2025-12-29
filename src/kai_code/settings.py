@@ -266,3 +266,97 @@ def export_settings(root_dir: Path, output_path: Path) -> tuple[bool, str]:
 
     except Exception as e:
         return False, f"Failed to export settings: {e}"
+
+
+# Valid configuration keys (both snake_case and camelCase versions)
+# Excludes session-specific fields which should not be imported
+_VALID_CONFIG_KEYS = {
+    # snake_case
+    "default_model",
+    "default_toolset",
+    "permission_mode",
+    "allowed_tools",
+    "disallowed_tools",
+    "allowed_commands",
+    "disallowed_commands",
+    # camelCase
+    "defaultModel",
+    "defaultToolset",
+    "permissionMode",
+    "allowedTools",
+    "disallowedTools",
+    "allowedCommands",
+    "disallowedCommands",
+}
+
+
+def import_settings(input_path: Path, target: str, root_dir: Path) -> tuple[bool, str]:
+    """Import settings from a JSON file to a target settings file.
+
+    Reads settings from the input file and merges them with the existing
+    settings in the target file (global, project, or local).
+
+    Args:
+        input_path: Path to the JSON file containing settings to import.
+        target: Target settings file - 'global', 'project', or 'local'.
+        root_dir: Project root directory for project/local settings paths.
+
+    Returns:
+        A tuple of (success, message) indicating the result.
+    """
+    # Validate target
+    valid_targets = {"global", "project", "local"}
+    if target not in valid_targets:
+        return False, f"Invalid target '{target}'. Must be one of: {', '.join(sorted(valid_targets))}"
+
+    # Check input file exists
+    if not input_path.exists():
+        return False, f"Input file not found: {input_path}"
+
+    # Read input file
+    try:
+        input_data = json.loads(input_path.read_text())
+        if not isinstance(input_data, dict):
+            return False, "Input file must contain a JSON object"
+    except json.JSONDecodeError as e:
+        return False, f"Invalid JSON in input file: {e}"
+    except Exception as e:
+        return False, f"Failed to read input file: {e}"
+
+    # Validate keys
+    invalid_keys = set(input_data.keys()) - _VALID_CONFIG_KEYS
+    if invalid_keys:
+        return False, f"Invalid settings keys: {', '.join(sorted(invalid_keys))}"
+
+    # Reject session-specific fields if present
+    session_keys_present = set(input_data.keys()) & _SESSION_FIELDS
+    if session_keys_present:
+        return False, f"Cannot import session-specific fields: {', '.join(sorted(session_keys_present))}"
+
+    # No settings to import
+    if not input_data:
+        return False, "No settings to import (file is empty or contains only null values)"
+
+    # Determine target path
+    if target == "global":
+        target_path = global_settings_path()
+    elif target == "project":
+        target_path = project_settings_path(root_dir)
+    else:  # local
+        target_path = local_settings_path(root_dir)
+
+    try:
+        # Read existing settings
+        existing_data = _read_json(target_path)
+
+        # Merge imported settings with existing (imported takes precedence)
+        merged_data = {**existing_data, **input_data}
+
+        # Write merged settings
+        _write_json(target_path, merged_data)
+
+        imported_keys = list(input_data.keys())
+        return True, f"Imported {len(imported_keys)} setting(s) to {target} settings: {', '.join(imported_keys)}"
+
+    except Exception as e:
+        return False, f"Failed to write settings: {e}"
