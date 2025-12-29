@@ -50,8 +50,8 @@
           "file_paths": [
             "src/kai_code/memory/manager.py"
           ],
-          "status": "pending",
-          "notes": ""
+          "status": "completed",
+          "notes": "_history_block property added to __init__ and ConversationHistoryMemoryBlock created in _load_default_blocks()"
         },
         {
           "subtask_id": "2.2",
@@ -60,8 +60,8 @@
           "file_paths": [
             "src/kai_code/memory/manager.py"
           ],
-          "status": "pending",
-          "notes": ""
+          "status": "completed",
+          "notes": "get_history_block() method implemented, returns Optional[ConversationHistoryMemoryBlock]"
         },
         {
           "subtask_id": "2.3",
@@ -70,8 +70,8 @@
           "file_paths": [
             "src/kai_code/memory/manager.py"
           ],
-          "status": "pending",
-          "notes": ""
+          "status": "completed",
+          "notes": "add_history_entry() implemented with timestamp, role, summary, message_id params. Handles max_entries limit by removing oldest entries."
         },
         {
           "subtask_id": "2.4",

@@ -1,11 +1,11 @@
 # Build Progress - Add ConversationHistoryBlock to Memory System
 
 ## Current Status
-Phase 1 completed - ConversationHistoryMemoryBlock dataclasses defined
+Phase 1 completed, Phase 2 partially completed (3/5 subtasks)
 
 ## Completed Subtasks
 
-### Phase 1: Create ConversationHistoryMemoryBlock
+### Phase 1: Create ConversationHistoryMemoryBlock ✅
 
 #### 1.1 Define ConversationHistoryEntry dataclass ✅
 - Implemented in `src/kai_code/memory/blocks.py`
@@ -18,12 +18,23 @@ Phase 1 completed - ConversationHistoryMemoryBlock dataclasses defined
 - Includes __post_init__ for default label="conversation_history" and description
 - Follows SkillsMemoryBlock/ProjectMemoryBlock patterns
 
+### Phase 2: Integrate with MemoryManager (3/5 complete)
+
+#### 2.1 Add history block to MemoryManager initialization ✅
+- _history_block property added to __init__
+- ConversationHistoryMemoryBlock created in _load_default_blocks()
+
+#### 2.2 Implement get_history_block method ✅
+- get_history_block() returns Optional[ConversationHistoryMemoryBlock]
+
+#### 2.3 Implement add_history_entry method ✅
+- Creates ConversationHistoryEntry with current timestamp
+- Appends to history block
+- Enforces max_entries limit by removing oldest entries
+
 ## Pending Subtasks
 
 ### Phase 2: Integrate with MemoryManager
-- 2.1 Add history block to MemoryManager initialization
-- 2.2 Implement get_history_block method
-- 2.3 Implement add_history_entry method
 - 2.4 Implement _update_history_content method
 - 2.5 Implement clear_history method
 
@@ -36,5 +47,5 @@ Phase 1 completed - ConversationHistoryMemoryBlock dataclasses defined
 - 4.3 Run full test suite
 
 ## Notes
-- Implementation for Phase 1 was found already complete in blocks.py
-- Verified dataclass fields match spec requirements
+- Previous sessions implemented most Phase 1 and Phase 2 work
+- Remaining work: 2.4, 2.5, 3.1, 4.1, 4.2, 4.3
