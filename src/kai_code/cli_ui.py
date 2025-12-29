@@ -176,10 +176,28 @@ def format_tool_message_content(content: Any) -> str:
 class TokenTracker:
     """Track token usage across the conversation."""
 
+    # Threshold constants for context limit warnings
+    WARNING_THRESHOLD = 0.80  # 80% - show warning
+    CRITICAL_THRESHOLD = 0.95  # 95% - show critical warning
+
     def __init__(self) -> None:
         self.baseline_context = 0  # Baseline system context (system + agent.md + tools)
         self.current_context = 0  # Total context including messages
         self.last_output = 0
+        self._context_limit: int | None = None  # Maximum context window size
+
+    @property
+    def context_limit(self) -> int | None:
+        """Get the context limit for the current model."""
+        return self._context_limit
+
+    def set_context_limit(self, limit: int) -> None:
+        """Set the context limit for the current model.
+
+        Args:
+            limit: The maximum context window size in tokens
+        """
+        self._context_limit = limit
 
     def set_baseline(self, tokens: int) -> None:
         """Set the baseline context token count.

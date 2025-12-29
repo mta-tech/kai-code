@@ -11,10 +11,15 @@
       "discovered_at": "2025-12-29T15:51:07.732875+00:00"
     },
     "src/kai_code/model.py": {
-      "description": "ModelInfo dataclass with id, handle, provider, is_default, update_args fields. Does NOT have context_window field - needs to be added. models.json also lacks context limits.",
-      "category": "architecture",
-      "discovered_at": "2025-12-29T15:51:07.968532+00:00"
+      "description": "Added get_context_limit(model_identifier: str) -> int function that retrieves context window limit for a model. Uses get_model_info() to look up model and returns context_window or DEFAULT_CONTEXT_WINDOW (128K) as fallback. Also added getContextLimit TypeScript-compat alias.",
+      "category": "function",
+      "discovered_at": "2025-12-29T16:02:54.201818+00:00"
+    },
+    "src/kai_code/models.json": {
+      "description": "Models now include context_window field with token limits: Claude 200K, GPT-4o/mini 128K, o1/o3 200K, Gemini 1M",
+      "category": "data_structure",
+      "discovered_at": "2025-12-29T15:54:10.243578+00:00"
     }
   },
-  "last_updated": "2025-12-29T15:51:07.968542+00:00"
+  "last_updated": "2025-12-29T16:02:54.201833+00:00"
 }
