@@ -19,6 +19,7 @@ from langgraph.types import Command
 from .backend import KaiLocalBackend
 from .checkpointer import KaiFileCheckpointer
 from .patching import apply_patch as _apply_patch
+from .stats import RunStats
 from .permissions import PermissionConfig, permission_denied_message
 from .prompts import load_prompt
 from .skills import discover_skills, format_skills_for_prompt, initialize_skills_system
@@ -49,6 +50,7 @@ class KaiResult:
     output: str
     messages: list[dict[str, Any]]
     raw: dict[str, Any]
+    stats: RunStats | None = None
 
 
 def _ensure_parent(path: Path) -> None:
