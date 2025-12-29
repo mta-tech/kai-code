@@ -10,6 +10,12 @@ from typing import TYPE_CHECKING, Callable
 from kai_code.rich_config import console, COLORS, rich_settings
 from kai_code.cli_ui import TokenTracker, show_interactive_help
 from kai_code.skills import discover_skills_legacy
+from kai_code.errors import ActionableError, ErrorType, render_error
+from kai_code.error_suggestions import (
+    make_unknown_command_error,
+    make_missing_argument_error,
+    make_invalid_flag_error,
+)
 
 if TYPE_CHECKING:
     from kai_code.model import ModelInfo
@@ -91,12 +97,16 @@ def handle_command(
         _show_ralph_status(agent)
         return None
 
-    # Unknown command - let it pass through as regular input
-    console.print(
-        f"[yellow]Unknown command: {command_input}[/yellow]",
-        style=COLORS["dim"],
-    )
-    console.print("Type /help for available commands.", style=COLORS["dim"])
+    # Unknown command - show actionable error with suggestions
+    available_commands = [
+        "/help", "/clear", "/tokens", "/quit", "/exit", "/q",
+        "/skills", "/brainstorm", "/models", "/model", "/tasks", "/task",
+        "/ralph-loop", "/cancel-ralph", "/ralph-cancel", "/stop-ralph",
+        "/ralph-status", "/ralph",
+    ]
+    error = make_unknown_command_error(command_input, available_commands)
+    error.severity = "warning"  # Use warning since it's not fatal
+    render_error(error, console)
     return None
 
 
@@ -110,7 +120,14 @@ def execute_bash_command(command_input: str) -> None:
     bash_command = command_input[1:].strip()
 
     if not bash_command:
-        console.print("[yellow]No command provided after ![/yellow]")
+        error = make_missing_argument_error(
+            command="!",
+            missing_arg="command",
+            expected_type="shell command",
+            usage_example="!ls -la",
+        )
+        error.severity = "warning"
+        render_error(error, console)
         return
 
     console.print()
@@ -142,9 +159,36 @@ def execute_bash_command(command_input: str) -> None:
             )
 
     except subprocess.TimeoutExpired:
-        console.print("[red]Command timed out after 5 minutes[/red]")
+        error = ActionableError(
+            error_type=ErrorType.TIMEOUT_ERROR,
+            message=f"Command timed out after 5 minutes: '{bash_command}'",
+            suggestions=[
+                "The command took too long to complete",
+                "Consider running long commands in the background with '&'",
+                "Break the command into smaller parts",
+            ],
+            recovery_commands=[
+                f"# Run in background: !{bash_command} &",
+                "# Or increase timeout by running separately",
+            ],
+            context={"command": bash_command, "timeout": "300s"},
+        )
+        render_error(error, console)
     except Exception as e:
-        console.print(f"[red]Error executing command: {e}[/red]")
+        error = ActionableError(
+            error_type=ErrorType.COMMAND_EXECUTION_ERROR,
+            message=f"Error executing command: {e}",
+            suggestions=[
+                "Check if the command is valid",
+                "Verify required tools/binaries are installed",
+                "Check file paths and permissions",
+            ],
+            recovery_commands=[
+                f"which {bash_command.split()[0]}" if bash_command.split() else "# Check command syntax",
+            ],
+            context={"command": bash_command, "error": str(e)},
+        )
+        render_error(error, console)
 
     console.print()
 
@@ -258,10 +302,21 @@ def _handle_ralph_loop(command_input: str, agent) -> str | None:
 
     parts = shlex.split(command_input.strip())
 
+    # Define valid flags for error suggestions
+    valid_ralph_flags = [
+        "--promise", "--completion-promise",
+        "--max-iterations", "--timeout", "--token-limit",
+    ]
+
     if len(parts) < 2:
-        console.print(
-            "[yellow]Usage: /ralph-loop <prompt> [--promise <text>] [--max-iterations <n>] [--timeout <s>] [--token-limit <n>][/yellow]"
+        error = make_missing_argument_error(
+            command="/ralph-loop",
+            missing_arg="prompt",
+            expected_type="text describing what the agent should accomplish",
+            usage_example='/ralph-loop "implement the login feature" --max-iterations 10',
         )
+        error.severity = "warning"
+        render_error(error, console)
         return None
 
     # Parse command - prompt is everything until first flag
@@ -279,7 +334,14 @@ def _handle_ralph_loop(command_input: str, agent) -> str | None:
         i += 1
 
     if not prompt_parts:
-        console.print("[yellow]Error: No prompt provided[/yellow]")
+        error = make_missing_argument_error(
+            command="/ralph-loop",
+            missing_arg="prompt",
+            expected_type="text describing what the agent should accomplish",
+            usage_example='/ralph-loop "implement the login feature" --max-iterations 10',
+        )
+        error.severity = "warning"
+        render_error(error, console)
         return None
 
     prompt = " ".join(prompt_parts)
@@ -292,7 +354,14 @@ def _handle_ralph_loop(command_input: str, agent) -> str | None:
                 completion_promise = parts[i + 1]
                 i += 2
             else:
-                console.print(f"[yellow]Error: {flag} requires a value[/yellow]")
+                error = make_missing_argument_error(
+                    command="/ralph-loop",
+                    missing_arg=f"value for {flag}",
+                    expected_type="text describing the completion criteria",
+                    usage_example=f'/ralph-loop "my task" {flag} "all tests pass"',
+                )
+                error.severity = "warning"
+                render_error(error, console)
                 return None
         elif flag == "--max-iterations":
             if i + 1 < len(parts):
@@ -300,10 +369,30 @@ def _handle_ralph_loop(command_input: str, agent) -> str | None:
                     max_iterations = int(parts[i + 1])
                     i += 2
                 except ValueError:
-                    console.print("[yellow]Error: --max-iterations must be a number[/yellow]")
+                    error = ActionableError(
+                        error_type=ErrorType.VALIDATION_ERROR,
+                        message=f"Invalid value for --max-iterations: '{parts[i + 1]}' is not a number",
+                        suggestions=[
+                            "--max-iterations requires an integer value",
+                            "This sets the maximum number of agent iterations",
+                        ],
+                        recovery_commands=[
+                            '/ralph-loop "my task" --max-iterations 50',
+                        ],
+                        context={"flag": "--max-iterations", "value": parts[i + 1]},
+                        severity="warning",
+                    )
+                    render_error(error, console)
                     return None
             else:
-                console.print("[yellow]Error: --max-iterations requires a value[/yellow]")
+                error = make_missing_argument_error(
+                    command="/ralph-loop",
+                    missing_arg="value for --max-iterations",
+                    expected_type="integer (number of iterations)",
+                    usage_example='/ralph-loop "my task" --max-iterations 50',
+                )
+                error.severity = "warning"
+                render_error(error, console)
                 return None
         elif flag == "--timeout":
             if i + 1 < len(parts):
@@ -311,10 +400,30 @@ def _handle_ralph_loop(command_input: str, agent) -> str | None:
                     timeout_seconds = int(parts[i + 1])
                     i += 2
                 except ValueError:
-                    console.print("[yellow]Error: --timeout must be a number[/yellow]")
+                    error = ActionableError(
+                        error_type=ErrorType.VALIDATION_ERROR,
+                        message=f"Invalid value for --timeout: '{parts[i + 1]}' is not a number",
+                        suggestions=[
+                            "--timeout requires an integer value (seconds)",
+                            "This sets the maximum time before the loop stops",
+                        ],
+                        recovery_commands=[
+                            '/ralph-loop "my task" --timeout 3600',
+                        ],
+                        context={"flag": "--timeout", "value": parts[i + 1]},
+                        severity="warning",
+                    )
+                    render_error(error, console)
                     return None
             else:
-                console.print("[yellow]Error: --timeout requires a value[/yellow]")
+                error = make_missing_argument_error(
+                    command="/ralph-loop",
+                    missing_arg="value for --timeout",
+                    expected_type="integer (seconds)",
+                    usage_example='/ralph-loop "my task" --timeout 3600',
+                )
+                error.severity = "warning"
+                render_error(error, console)
                 return None
         elif flag == "--token-limit":
             if i + 1 < len(parts):
@@ -322,13 +431,40 @@ def _handle_ralph_loop(command_input: str, agent) -> str | None:
                     token_limit = int(parts[i + 1])
                     i += 2
                 except ValueError:
-                    console.print("[yellow]Error: --token-limit must be a number[/yellow]")
+                    error = ActionableError(
+                        error_type=ErrorType.VALIDATION_ERROR,
+                        message=f"Invalid value for --token-limit: '{parts[i + 1]}' is not a number",
+                        suggestions=[
+                            "--token-limit requires an integer value",
+                            "This sets the maximum tokens before the loop stops",
+                        ],
+                        recovery_commands=[
+                            '/ralph-loop "my task" --token-limit 500000',
+                        ],
+                        context={"flag": "--token-limit", "value": parts[i + 1]},
+                        severity="warning",
+                    )
+                    render_error(error, console)
                     return None
             else:
-                console.print("[yellow]Error: --token-limit requires a value[/yellow]")
+                error = make_missing_argument_error(
+                    command="/ralph-loop",
+                    missing_arg="value for --token-limit",
+                    expected_type="integer (number of tokens)",
+                    usage_example='/ralph-loop "my task" --token-limit 500000',
+                )
+                error.severity = "warning"
+                render_error(error, console)
                 return None
         else:
-            console.print(f"[yellow]Unknown flag: {flag}[/yellow]")
+            # Unknown flag - use make_invalid_flag_error with suggestions
+            error = make_invalid_flag_error(
+                flag=flag,
+                valid_flags=valid_ralph_flags,
+                command="/ralph-loop",
+            )
+            error.severity = "warning"
+            render_error(error, console)
             i += 1
 
     # Start Ralph loop
