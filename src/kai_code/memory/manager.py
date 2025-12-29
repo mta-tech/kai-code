@@ -6,6 +6,7 @@ Ported from letta-code memory management system.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Dict, List, Optional
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from .blocks import (
     LoadedSkillsMemoryBlock,
     ProjectMemoryBlock,
     ConversationHistoryMemoryBlock,
+    ConversationHistoryEntry,
 )
 from ..skills_parser import SkillMetadata, format_skills_for_prompt
 from ..skills_memory import parse_mdx_frontmatter
@@ -103,6 +105,42 @@ class MemoryManager:
     def get_history_block(self) -> Optional[ConversationHistoryMemoryBlock]:
         """Get conversation history memory block."""
         return self._history_block
+
+    def add_history_entry(
+        self,
+        role: str,
+        summary: str,
+        message_id: Optional[str] = None
+    ) -> None:
+        """Add a new entry to the conversation history.
+
+        Creates a ConversationHistoryEntry with current timestamp and appends it to
+        the history block. Automatically removes oldest entries when max_entries is exceeded.
+
+        Args:
+            role: The role of the message sender ("user" or "assistant")
+            summary: Condensed version of the message content
+            message_id: Optional reference ID for the original message
+        """
+        if self._history_block:
+            # Create new entry with current timestamp
+            entry = ConversationHistoryEntry(
+                timestamp=datetime.now().isoformat(),
+                role=role,
+                summary=summary,
+                message_id=message_id
+            )
+
+            # Add entry to history
+            self._history_block.entries.append(entry)
+
+            # Enforce max_entries limit by removing oldest entries
+            while len(self._history_block.entries) > self._history_block.max_entries:
+                self._history_block.entries.pop(0)
+
+            logger.debug(f"Added history entry: {role} - {summary[:50]}...")
+        else:
+            logger.error("History block not initialized")
 
     def get_skill_blocks(self) -> tuple[Optional[SkillsMemoryBlock], Optional[LoadedSkillsMemoryBlock]]:
         """Get skills-related memory blocks."""
