@@ -121,7 +121,55 @@ class SQLiteAdapter(DatabaseAdapter):
 
     def get_cardinality(self, table: str, column: str) -> CardinalityInfo:
         """Get distinct value count and samples for a column."""
-        raise NotImplementedError("get_cardinality not yet implemented")
+        # Parse schema.table format
+        if "." in table:
+            _schema, table_name = table.split(".", 1)
+        else:
+            table_name = table
+
+        try:
+            # Get counts
+            count_query = f"""
+                SELECT
+                    COUNT(DISTINCT "{column}") as distinct_count,
+                    COUNT(*) as total_count
+                FROM "{table_name}"
+            """
+            cursor = self._conn.execute(count_query)
+            counts = cursor.fetchone()
+            distinct_count = counts[0] if counts else 0
+            total_count = counts[1] if counts else 0
+
+            # Get sample values
+            sample_query = f"""
+                SELECT DISTINCT "{column}"
+                FROM "{table_name}"
+                WHERE "{column}" IS NOT NULL
+                LIMIT 50
+            """
+            cursor = self._conn.execute(sample_query)
+            samples = cursor.fetchall()
+            sample_values = [row[0] for row in samples]
+
+            is_low_cardinality = distinct_count <= self.LOW_CARDINALITY_THRESHOLD
+
+            return CardinalityInfo(
+                table=table,
+                column=column,
+                distinct_count=distinct_count,
+                total_count=total_count,
+                sample_values=sample_values,
+                is_low_cardinality=is_low_cardinality,
+            )
+        except Exception:
+            return CardinalityInfo(
+                table=table,
+                column=column,
+                distinct_count=0,
+                total_count=0,
+                sample_values=[],
+                is_low_cardinality=False,
+            )
 
     def execute_query(self, sql: str, limit: int = 100) -> QueryResult:
         """Execute a read-only SQL query."""
