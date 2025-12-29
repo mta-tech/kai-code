@@ -371,7 +371,6 @@ def _stream_json_run(
             next_event_id += 1
             _emit_jsonl(payload)
 
-    ttft_ms: int | None = None
     stop_reason: str | None = None
     token_usage: dict[str, int | None] = {
         "prompt_tokens": None,
@@ -407,7 +406,6 @@ def _stream_json_run(
     open_step_id: int | None = None
 
     tool_call_started_ms: dict[str, int] = {}
-    tool_latencies: list[int] = []
 
     try:
         for chunk in agent.stream(prompt):
@@ -415,8 +413,8 @@ def _stream_json_run(
             ts_ms = now_ms()
             emitted = False
 
-            if ttft_ms is None:
-                ttft_ms = max(0, ts_ms - started_ms)
+            if stats.ttft_ms is None:
+                stats.ttft_ms = max(0, ts_ms - started_ms)
 
             if isinstance(chunk, dict) and isinstance(chunk.get("messages"), list):
                 last_snapshot = chunk
@@ -510,6 +508,9 @@ def _stream_json_run(
                                 continue
                             seen_tool_calls.add(key)
 
+                            # Record tool call in RunStats
+                            stats.record_tool_call(te.tool_name)
+
                             if tc_id is not None and tc_id not in tool_call_started_ms:
                                 tool_call_started_ms[tc_id] = ts_ms
                             _emit(
@@ -540,7 +541,21 @@ def _stream_json_run(
                             tool_latency_ms = None
                             if tr_id is not None and tr_id in tool_call_started_ms:
                                 tool_latency_ms = max(0, ts_ms - tool_call_started_ms[tr_id])
-                                tool_latencies.append(tool_latency_ms)
+
+                            # Detect if this is an error result
+                            result_fields = extract_tool_result_fields(te)
+                            is_error = (
+                                result_fields.get("status") == "error"
+                                or (result_fields.get("exit_code") is not None and result_fields.get("exit_code") != 0)
+                            )
+
+                            # Record tool result in RunStats
+                            stats.record_tool_result(
+                                te.tool_name or "",
+                                latency_ms=tool_latency_ms,
+                                is_error=is_error,
+                            )
+
                             _emit(
                                 {
                                     "type": "tool_result",
@@ -647,7 +662,7 @@ def _stream_json_run(
                     "started_ms": started_ms,
                     "ended_ms": ts_ms,
                     "duration_ms": max(0, ts_ms - started_ms),
-                    "ttft_ms": ttft_ms,
+                    "ttft_ms": stats.ttft_ms,
                     "chunk_count": stats.chunk_count,
                 },
                 **({"traceback": traceback.format_exc()} if include_tb else {}),
@@ -736,17 +751,18 @@ def _stream_json_run(
             "output": output,
             "stats": {
                 "duration_ms": stats.duration_ms,
-                "ttft_ms": ttft_ms,
+                "ttft_ms": stats.ttft_ms,
                 "chunk_count": stats.chunk_count,
                 "message_count": message_count,
                 "turn_count": turn_count,
                 "step_count": step_count,
-                "tool_call_count": len(seen_tool_calls),
-                "tool_result_count": len(seen_tool_results),
-                "tool_count": len(tool_latencies),
-                "tool_latency_ms_total": sum(tool_latencies) if tool_latencies else 0,
-                "tool_latency_ms_avg": (sum(tool_latencies) / len(tool_latencies)) if tool_latencies else None,
-                "tool_latency_ms_max": max(tool_latencies) if tool_latencies else None,
+                "tool_call_count": stats.tool_call_count,
+                "tool_result_count": stats.tool_result_count,
+                "tool_error_count": stats.tool_error_count,
+                "tool_count": len(stats.tool_names),
+                "tool_latency_ms_total": stats.tool_latency_total_ms,
+                "tool_latency_ms_avg": (stats.tool_latency_total_ms / stats.tool_result_count) if stats.tool_result_count > 0 and stats.tool_latency_total_ms > 0 else None,
+                "tool_latency_ms_max": stats.tool_latency_max_ms if stats.tool_latency_max_ms > 0 else None,
                 "token_usage": token_usage,
             },
             "turn_id": (turn_count - 1) if isinstance(turn_count, int) and turn_count > 0 else None,
