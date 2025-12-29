@@ -308,8 +308,42 @@ class TaskManager:
         return sorted(self._tasks.values(), key=lambda t: t.created_at, reverse=True)
 
     def get_active_tasks(self) -> list[Task]:
-        """Get all running or pending tasks."""
-        return [t for t in self._tasks.values() if t.status in (TaskStatus.PENDING, TaskStatus.RUNNING)]
+        """Get all running, pending, or queued tasks."""
+        return [
+            t for t in self._tasks.values()
+            if t.status in (TaskStatus.PENDING, TaskStatus.RUNNING, TaskStatus.QUEUED)
+        ]
+
+    def get_queued_tasks(self) -> list[Task]:
+        """Get all tasks waiting in the priority queue.
+
+        Returns:
+            List of queued tasks, sorted by priority (highest priority first).
+        """
+        return self._pending_queue.get_all()
+
+    def get_tasks_by_priority(self, priority: TaskPriority) -> list[Task]:
+        """Get all tasks with a specific priority level.
+
+        Args:
+            priority: The priority level to filter by.
+
+        Returns:
+            List of tasks with the specified priority, sorted by creation time (newest first).
+        """
+        return sorted(
+            [t for t in self._tasks.values() if t.priority == priority],
+            key=lambda t: t.created_at,
+            reverse=True,
+        )
+
+    def queued_count(self) -> int:
+        """Get count of tasks waiting in the queue.
+
+        Returns:
+            Number of tasks in the pending queue.
+        """
+        return len(self._pending_queue)
 
     def get_completed_tasks(self) -> list[Task]:
         """Get all completed, failed, or killed tasks."""
