@@ -26,6 +26,8 @@ from prompt_toolkit.key_binding import KeyBindings
 
 from .rich_config import COLORS, COMMANDS, SessionState, ShortcutContext, console
 from .image_utils import ImageData, get_clipboard_image
+from .errors import ActionableError, ErrorType, render_error
+from .error_suggestions import suggest_files
 
 # Type for background task callback
 BackgroundTaskCallback = Callable[[str, bool], None]  # (text, is_shell) -> None
@@ -469,9 +471,48 @@ def parse_file_mentions(text: str) -> tuple[str, list[Path]]:
             if path.exists() and path.is_file():
                 files.append(path)
             else:
-                console.print(f"[yellow]Warning: File not found: {match}[/yellow]")
+                # Build actionable error with similar file suggestions
+                search_dir = path.parent if path.parent.exists() else Path.cwd()
+                similar_files = suggest_files(path, search_dir=search_dir, n=3, cutoff=0.5)
+
+                suggestions = [
+                    "Check if the file path is spelled correctly",
+                    "Verify the file exists in the expected location",
+                ]
+
+                # Add search directory info
+                if search_dir.exists():
+                    suggestions.append(f"Searching in: {search_dir}")
+
+                error = ActionableError(
+                    error_type=ErrorType.FILE_NOT_FOUND,
+                    message=f"File not found: {match}",
+                    suggestions=suggestions,
+                    related_items=similar_files,
+                    severity="warning",
+                    context={
+                        "path": str(path),
+                        "search_dir": str(search_dir),
+                    },
+                )
+                render_error(error, console=console)
         except Exception as e:
-            console.print(f"[yellow]Warning: Invalid path {match}: {e}[/yellow]")
+            # Build actionable error for invalid path
+            error = ActionableError(
+                error_type=ErrorType.FILE_NOT_FOUND,
+                message=f"Invalid path: {match}",
+                suggestions=[
+                    "Check if the path contains valid characters",
+                    "Ensure the path format is correct for your operating system",
+                    f"Error details: {e}",
+                ],
+                severity="warning",
+                context={
+                    "path": match,
+                    "error": str(e),
+                },
+            )
+            render_error(error, console=console)
 
     return text, files
 

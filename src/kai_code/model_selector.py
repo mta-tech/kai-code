@@ -12,6 +12,8 @@ from rich.text import Text
 from rich.box import ROUNDED
 
 from .model import models, models_static, ModelInfo, resolve_model, get_default_model
+from .errors import ActionableError, ErrorType, render_error
+from .error_suggestions import PROVIDER_API_KEY_INSTRUCTIONS
 
 console = Console(highlight=False)
 
@@ -74,12 +76,41 @@ def show_model_selector(
     available = get_available_models()
 
     if not available:
-        console.print()
-        console.print("[red]No models available. Configure API keys:[/red]")
-        console.print("  ANTHROPIC_API_KEY for Claude models")
-        console.print("  OPENAI_API_KEY for GPT models")
-        console.print("  GOOGLE_API_KEY for Gemini models")
-        console.print()
+        # Build suggestions with provider-specific instructions
+        suggestions = [
+            "Configure at least one API key to use models",
+        ]
+
+        # Add provider-specific setup instructions
+        for provider in ["anthropic", "openai", "google"]:
+            info = PROVIDER_API_KEY_INSTRUCTIONS.get(provider, {})
+            env_var = info.get("env_var", "")
+            description = info.get("description", provider.title())
+            if env_var:
+                suggestions.append(f"Set {env_var} for {description} models")
+
+        # Build recovery commands for setting up API keys
+        recovery_commands = []
+        for provider in ["anthropic", "openai", "google"]:
+            info = PROVIDER_API_KEY_INSTRUCTIONS.get(provider, {})
+            env_var = info.get("env_var", "")
+            url = info.get("url", "")
+            if env_var:
+                recovery_commands.append(f"export {env_var}=your-api-key-here")
+            if url:
+                recovery_commands.append(f"# Get key from: {url}")
+
+        error = ActionableError(
+            error_type=ErrorType.API_KEY_MISSING,
+            message="No models available - no API keys configured",
+            suggestions=suggestions,
+            recovery_commands=recovery_commands,
+            severity="warning",
+            context={
+                "checked_providers": "anthropic, openai, google",
+            },
+        )
+        render_error(error, console)
         return None
 
     # Find current selection index

@@ -10,6 +10,12 @@ from typing import TYPE_CHECKING, Callable
 from kai_code.rich_config import console, COLORS, rich_settings
 from kai_code.cli_ui import TokenTracker, show_interactive_help
 from kai_code.skills import discover_skills_legacy
+from kai_code.errors import ActionableError, ErrorType, render_error
+from kai_code.error_suggestions import (
+    make_unknown_command_error,
+    make_missing_argument_error,
+    make_invalid_flag_error,
+)
 from kai_code.settings import export_settings, import_settings
 
 if TYPE_CHECKING:
@@ -102,12 +108,16 @@ def handle_command(
         _handle_import_settings(command_input)
         return None
 
-    # Unknown command - let it pass through as regular input
-    console.print(
-        f"[yellow]Unknown command: {command_input}[/yellow]",
-        style=COLORS["dim"],
-    )
-    console.print("Type /help for available commands.", style=COLORS["dim"])
+    # Unknown command - show actionable error with suggestions
+    available_commands = [
+        "/help", "/clear", "/tokens", "/quit", "/exit", "/q",
+        "/skills", "/brainstorm", "/models", "/model", "/tasks", "/task",
+        "/ralph-loop", "/cancel-ralph", "/ralph-cancel", "/stop-ralph",
+        "/ralph-status", "/ralph", "/export-settings", "/import-settings",
+    ]
+    error = make_unknown_command_error(command_input, available_commands)
+    error.severity = "warning"  # Use warning since it's not fatal
+    render_error(error, console)
     return None
 
 
@@ -121,7 +131,14 @@ def execute_bash_command(command_input: str) -> None:
     bash_command = command_input[1:].strip()
 
     if not bash_command:
-        console.print("[yellow]No command provided after ![/yellow]")
+        error = make_missing_argument_error(
+            command="!",
+            missing_arg="command",
+            expected_type="shell command",
+            usage_example="!ls -la",
+        )
+        error.severity = "warning"
+        render_error(error, console)
         return
 
     console.print()
@@ -153,9 +170,36 @@ def execute_bash_command(command_input: str) -> None:
             )
 
     except subprocess.TimeoutExpired:
-        console.print("[red]Command timed out after 5 minutes[/red]")
+        error = ActionableError(
+            error_type=ErrorType.TIMEOUT_ERROR,
+            message=f"Command timed out after 5 minutes: '{bash_command}'",
+            suggestions=[
+                "The command took too long to complete",
+                "Consider running long commands in the background with '&'",
+                "Break the command into smaller parts",
+            ],
+            recovery_commands=[
+                f"# Run in background: !{bash_command} &",
+                "# Or increase timeout by running separately",
+            ],
+            context={"command": bash_command, "timeout": "300s"},
+        )
+        render_error(error, console)
     except Exception as e:
-        console.print(f"[red]Error executing command: {e}[/red]")
+        error = ActionableError(
+            error_type=ErrorType.COMMAND_EXECUTION_ERROR,
+            message=f"Error executing command: {e}",
+            suggestions=[
+                "Check if the command is valid",
+                "Verify required tools/binaries are installed",
+                "Check file paths and permissions",
+            ],
+            recovery_commands=[
+                f"which {bash_command.split()[0]}" if bash_command.split() else "# Check command syntax",
+            ],
+            context={"command": bash_command, "error": str(e)},
+        )
+        render_error(error, console)
 
     console.print()
 
@@ -269,10 +313,21 @@ def _handle_ralph_loop(command_input: str, agent) -> str | None:
 
     parts = shlex.split(command_input.strip())
 
+    # Define valid flags for error suggestions
+    valid_ralph_flags = [
+        "--promise", "--completion-promise",
+        "--max-iterations", "--timeout", "--token-limit",
+    ]
+
     if len(parts) < 2:
-        console.print(
-            "[yellow]Usage: /ralph-loop <prompt> [--promise <text>] [--max-iterations <n>] [--timeout <s>] [--token-limit <n>][/yellow]"
+        error = make_missing_argument_error(
+            command="/ralph-loop",
+            missing_arg="prompt",
+            expected_type="text describing what the agent should accomplish",
+            usage_example='/ralph-loop "implement the login feature" --max-iterations 10',
         )
+        error.severity = "warning"
+        render_error(error, console)
         return None
 
     # Parse command - prompt is everything until first flag
@@ -290,7 +345,14 @@ def _handle_ralph_loop(command_input: str, agent) -> str | None:
         i += 1
 
     if not prompt_parts:
-        console.print("[yellow]Error: No prompt provided[/yellow]")
+        error = make_missing_argument_error(
+            command="/ralph-loop",
+            missing_arg="prompt",
+            expected_type="text describing what the agent should accomplish",
+            usage_example='/ralph-loop "implement the login feature" --max-iterations 10',
+        )
+        error.severity = "warning"
+        render_error(error, console)
         return None
 
     prompt = " ".join(prompt_parts)
@@ -303,7 +365,14 @@ def _handle_ralph_loop(command_input: str, agent) -> str | None:
                 completion_promise = parts[i + 1]
                 i += 2
             else:
-                console.print(f"[yellow]Error: {flag} requires a value[/yellow]")
+                error = make_missing_argument_error(
+                    command="/ralph-loop",
+                    missing_arg=f"value for {flag}",
+                    expected_type="text describing the completion criteria",
+                    usage_example=f'/ralph-loop "my task" {flag} "all tests pass"',
+                )
+                error.severity = "warning"
+                render_error(error, console)
                 return None
         elif flag == "--max-iterations":
             if i + 1 < len(parts):
@@ -311,10 +380,30 @@ def _handle_ralph_loop(command_input: str, agent) -> str | None:
                     max_iterations = int(parts[i + 1])
                     i += 2
                 except ValueError:
-                    console.print("[yellow]Error: --max-iterations must be a number[/yellow]")
+                    error = ActionableError(
+                        error_type=ErrorType.VALIDATION_ERROR,
+                        message=f"Invalid value for --max-iterations: '{parts[i + 1]}' is not a number",
+                        suggestions=[
+                            "--max-iterations requires an integer value",
+                            "This sets the maximum number of agent iterations",
+                        ],
+                        recovery_commands=[
+                            '/ralph-loop "my task" --max-iterations 50',
+                        ],
+                        context={"flag": "--max-iterations", "value": parts[i + 1]},
+                        severity="warning",
+                    )
+                    render_error(error, console)
                     return None
             else:
-                console.print("[yellow]Error: --max-iterations requires a value[/yellow]")
+                error = make_missing_argument_error(
+                    command="/ralph-loop",
+                    missing_arg="value for --max-iterations",
+                    expected_type="integer (number of iterations)",
+                    usage_example='/ralph-loop "my task" --max-iterations 50',
+                )
+                error.severity = "warning"
+                render_error(error, console)
                 return None
         elif flag == "--timeout":
             if i + 1 < len(parts):
@@ -322,10 +411,30 @@ def _handle_ralph_loop(command_input: str, agent) -> str | None:
                     timeout_seconds = int(parts[i + 1])
                     i += 2
                 except ValueError:
-                    console.print("[yellow]Error: --timeout must be a number[/yellow]")
+                    error = ActionableError(
+                        error_type=ErrorType.VALIDATION_ERROR,
+                        message=f"Invalid value for --timeout: '{parts[i + 1]}' is not a number",
+                        suggestions=[
+                            "--timeout requires an integer value (seconds)",
+                            "This sets the maximum time before the loop stops",
+                        ],
+                        recovery_commands=[
+                            '/ralph-loop "my task" --timeout 3600',
+                        ],
+                        context={"flag": "--timeout", "value": parts[i + 1]},
+                        severity="warning",
+                    )
+                    render_error(error, console)
                     return None
             else:
-                console.print("[yellow]Error: --timeout requires a value[/yellow]")
+                error = make_missing_argument_error(
+                    command="/ralph-loop",
+                    missing_arg="value for --timeout",
+                    expected_type="integer (seconds)",
+                    usage_example='/ralph-loop "my task" --timeout 3600',
+                )
+                error.severity = "warning"
+                render_error(error, console)
                 return None
         elif flag == "--token-limit":
             if i + 1 < len(parts):
@@ -333,13 +442,40 @@ def _handle_ralph_loop(command_input: str, agent) -> str | None:
                     token_limit = int(parts[i + 1])
                     i += 2
                 except ValueError:
-                    console.print("[yellow]Error: --token-limit must be a number[/yellow]")
+                    error = ActionableError(
+                        error_type=ErrorType.VALIDATION_ERROR,
+                        message=f"Invalid value for --token-limit: '{parts[i + 1]}' is not a number",
+                        suggestions=[
+                            "--token-limit requires an integer value",
+                            "This sets the maximum tokens before the loop stops",
+                        ],
+                        recovery_commands=[
+                            '/ralph-loop "my task" --token-limit 500000',
+                        ],
+                        context={"flag": "--token-limit", "value": parts[i + 1]},
+                        severity="warning",
+                    )
+                    render_error(error, console)
                     return None
             else:
-                console.print("[yellow]Error: --token-limit requires a value[/yellow]")
+                error = make_missing_argument_error(
+                    command="/ralph-loop",
+                    missing_arg="value for --token-limit",
+                    expected_type="integer (number of tokens)",
+                    usage_example='/ralph-loop "my task" --token-limit 500000',
+                )
+                error.severity = "warning"
+                render_error(error, console)
                 return None
         else:
-            console.print(f"[yellow]Unknown flag: {flag}[/yellow]")
+            # Unknown flag - use make_invalid_flag_error with suggestions
+            error = make_invalid_flag_error(
+                flag=flag,
+                valid_flags=valid_ralph_flags,
+                command="/ralph-loop",
+            )
+            error.severity = "warning"
+            render_error(error, console)
             i += 1
 
     # Start Ralph loop
@@ -440,126 +576,72 @@ def _show_ralph_status(agent) -> None:
 
 
 def _handle_export_settings(command_input: str) -> None:
-    """Handle /export-settings [filename] command.
-
-    Exports current merged settings to a JSON file.
-
-    Args:
-        command_input: The full command string
-    """
-    # Parse optional filename argument
+    """Handle /export-settings command."""
     parts = command_input.strip().split(maxsplit=1)
-    if len(parts) > 1:
-        filename = parts[1]
-    else:
-        filename = "kai-settings.json"
+    filename = parts[1] if len(parts) > 1 else "kai-settings.json"
 
-    # Determine root directory and output path
-    root_dir = rich_settings.project_root or Path.cwd()
-    output_path = root_dir / filename
-
-    # Export settings
-    success, message = export_settings(root_dir, output_path)
-
-    console.print()
-    if success:
-        console.print(f"[green]✓ {message}[/green]")
-    else:
-        console.print(f"[red]✗ {message}[/red]")
-    console.print()
+    try:
+        result = export_settings(filename)
+        console.print(f"[green]{result}[/green]")
+    except Exception as e:
+        error = ActionableError(
+            error_type=ErrorType.FILE_ERROR,
+            message=f"Failed to export settings: {e}",
+            suggestions=[
+                "Check if you have write permissions to the target directory",
+                "Try using a different filename or path",
+            ],
+            recovery_commands=[
+                f"# Try exporting to home directory: /export-settings ~/kai-settings.json",
+            ],
+            context={"filename": filename},
+        )
+        render_error(error, console)
 
 
 def _handle_import_settings(command_input: str) -> None:
-    """Handle /import-settings <filename> [--target global|project|local] command.
+    """Handle /import-settings command."""
+    parts = command_input.strip().split(maxsplit=1)
 
-    Imports settings from a JSON file to the specified target.
+    if len(parts) < 2:
+        error = make_missing_argument_error(
+            command="/import-settings",
+            missing_arg="filename",
+            expected_type="path to settings file",
+            usage_example="/import-settings kai-settings.json",
+        )
+        error.severity = "warning"
+        render_error(error, console)
+        return
 
-    Args:
-        command_input: The full command string
-    """
-    import shlex
+    filename = parts[1]
 
     try:
-        parts = shlex.split(command_input.strip())
-    except ValueError as e:
-        console.print()
-        console.print(f"[red]✗ Error parsing command: {e}[/red]")
-        console.print()
-        return
-
-    # Skip /import-settings command itself
-    args = parts[1:] if len(parts) > 1 else []
-
-    if not args:
-        console.print()
-        console.print("[yellow]Usage: /import-settings <filename> [--target global|project|local][/yellow]")
-        console.print("[dim]Default target is 'project'.[/dim]")
-        console.print()
-        return
-
-    # Parse filename and optional --target flag
-    filename = None
-    target = "project"  # Default target
-
-    i = 0
-    while i < len(args):
-        if args[i] == "--target":
-            if i + 1 < len(args):
-                target = args[i + 1].lower()
-                i += 2
-            else:
-                console.print()
-                console.print("[red]✗ Error: --target requires a value (global, project, or local)[/red]")
-                console.print()
-                return
-        elif args[i].startswith("--"):
-            console.print()
-            console.print(f"[yellow]Unknown flag: {args[i]}[/yellow]")
-            console.print()
-            return
-        elif filename is None:
-            filename = args[i]
-            i += 1
-        else:
-            console.print()
-            console.print("[yellow]Too many arguments. Usage: /import-settings <filename> [--target global|project|local][/yellow]")
-            console.print()
-            return
-
-    if filename is None:
-        console.print()
-        console.print("[yellow]Usage: /import-settings <filename> [--target global|project|local][/yellow]")
-        console.print("[dim]Default target is 'project'.[/dim]")
-        console.print()
-        return
-
-    # Validate target
-    valid_targets = {"global", "project", "local"}
-    if target not in valid_targets:
-        console.print()
-        console.print(f"[red]✗ Invalid target '{target}'. Must be one of: {', '.join(sorted(valid_targets))}[/red]")
-        console.print()
-        return
-
-    # Determine root directory and input path
-    root_dir = rich_settings.project_root or Path.cwd()
-    input_path = Path(filename)
-    if not input_path.is_absolute():
-        input_path = root_dir / filename
-
-    # Validate file exists before attempting import
-    if not input_path.exists():
-        console.print()
-        console.print(f"[red]✗ File not found: {input_path}[/red]")
-        console.print()
-        return
-
-    # Import settings
-    success, message = import_settings(input_path, target, root_dir)
-
-    console.print()
-    if success:
-        console.print(f"[green]✓ {message}[/green]")
-    else:
-        console.print(f"[red]✗ {message}[/red]")
-    console.print()
+        result = import_settings(filename)
+        console.print(f"[green]{result}[/green]")
+    except FileNotFoundError:
+        error = ActionableError(
+            error_type=ErrorType.FILE_NOT_FOUND,
+            message=f"Settings file not found: {filename}",
+            suggestions=[
+                "Check if the file path is correct",
+                "Use /export-settings to create a settings file first",
+            ],
+            recovery_commands=[
+                "# List files in current directory: !ls -la",
+                f"# Check if file exists: !ls -la {filename}",
+            ],
+            context={"filename": filename},
+        )
+        render_error(error, console)
+    except Exception as e:
+        error = ActionableError(
+            error_type=ErrorType.CONFIG_ERROR,
+            message=f"Failed to import settings: {e}",
+            suggestions=[
+                "Check if the file contains valid JSON",
+                "Ensure the settings format is correct",
+            ],
+            context={"filename": filename, "error": str(e)},
+        )
+        render_error(error, console)
