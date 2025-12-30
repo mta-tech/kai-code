@@ -26,6 +26,7 @@ COLORS = {
     "completed": "#10b981",
     "failed": "#ef4444",
     "killed": "#6b7280",
+    "queued": "#60a5fa",
 }
 
 
@@ -41,10 +42,16 @@ def _format_task_row(task: "Task", selected: bool = False) -> tuple[str, str, st
     """
     prefix = ">" if selected else " "
 
-    # Description (truncated)
+    # Priority indicator (e.g., [H] for high, [L] for low)
+    priority_indicator = task.priority_indicator
+
+    # Description with priority indicator (truncated)
     desc = task.description
-    if len(desc) > 50:
-        desc = desc[:47] + "..."
+    # Account for priority indicator length when truncating
+    max_desc_len = 50 - len(priority_indicator)
+    if len(desc) > max_desc_len:
+        desc = desc[:max_desc_len - 3] + "..."
+    desc = priority_indicator + desc
 
     # Status with color
     status_text = task.display_status
@@ -62,6 +69,8 @@ def _get_status_style(status: TaskStatus) -> str:
         return COLORS["failed"]
     elif status == TaskStatus.KILLED:
         return COLORS["dim"]
+    elif status == TaskStatus.QUEUED:
+        return COLORS["queued"]
     return COLORS["dim"]
 
 
@@ -89,7 +98,10 @@ def show_tasks_panel(interactive: bool = True) -> None:
 def _static_panel(tasks: list["Task"]) -> None:
     """Display a static (non-interactive) view of tasks."""
     manager = get_task_manager()
-    active = manager.get_active_tasks()
+    # Running tasks (not queued)
+    running = [t for t in tasks if t.status == TaskStatus.RUNNING]
+    # Queued tasks
+    queued = manager.get_queued_tasks()
     completed = manager.get_completed_tasks()
 
     # Create table
@@ -99,9 +111,17 @@ def _static_panel(tasks: list["Task"]) -> None:
     table.add_column("Status", justify="right", width=20)
 
     # Running tasks
-    if active:
+    if running:
         table.add_row("", Text("Running", style="bold"), "")
-        for task in active:
+        for task in running:
+            _, desc, status = _format_task_row(task)
+            table.add_row("", desc, Text(status, style=_get_status_style(task.status)))
+        table.add_row("", "", "")
+
+    # Queued tasks
+    if queued:
+        table.add_row("", Text("Queued", style=f"bold {COLORS['queued']}"), "")
+        for task in queued:
             _, desc, status = _format_task_row(task)
             table.add_row("", desc, Text(status, style=_get_status_style(task.status)))
         table.add_row("", "", "")
@@ -113,8 +133,14 @@ def _static_panel(tasks: list["Task"]) -> None:
             _, desc, status = _format_task_row(task)
             table.add_row("", desc, Text(status, style=_get_status_style(task.status)))
 
-    # Summary line
-    summary = f"{len(active)} active, {len(completed)} completed"
+    # Summary line with queued count
+    active_count = len(running)
+    queued_count = len(queued)
+    summary_parts = [f"{active_count} running"]
+    if queued_count > 0:
+        summary_parts.append(f"{queued_count} queued")
+    summary_parts.append(f"{len(completed)} completed")
+    summary = ", ".join(summary_parts)
 
     panel = Panel(
         table,
@@ -214,8 +240,11 @@ def _render_task_list(tasks: list["Task"], selected_idx: int) -> None:
     console.clear()
 
     manager = get_task_manager()
-    active = [t for t in tasks if t.status in (TaskStatus.PENDING, TaskStatus.RUNNING)]
-    completed = [t for t in tasks if t.status not in (TaskStatus.PENDING, TaskStatus.RUNNING)]
+    # Running tasks (not queued)
+    running = [t for t in tasks if t.status == TaskStatus.RUNNING]
+    # Queued tasks
+    queued = manager.get_queued_tasks()
+    completed = [t for t in tasks if t.status not in (TaskStatus.PENDING, TaskStatus.RUNNING, TaskStatus.QUEUED)]
 
     # Build table
     table = Table(show_header=False, box=None, padding=(0, 1))
@@ -226,9 +255,31 @@ def _render_task_list(tasks: list["Task"], selected_idx: int) -> None:
     idx = 0
 
     # Running section
-    if active:
-        table.add_row("", Text(f"Running ({len(active)})", style="bold"), "")
-        for task in active:
+    if running:
+        table.add_row("", Text(f"Running ({len(running)})", style="bold"), "")
+        for task in running:
+            is_selected = idx == selected_idx
+            prefix, desc, status = _format_task_row(task, is_selected)
+
+            if is_selected:
+                table.add_row(
+                    Text(prefix, style="bold cyan"),
+                    Text(desc, style="bold"),
+                    Text(status, style=f"bold {_get_status_style(task.status)}")
+                )
+            else:
+                table.add_row(
+                    prefix,
+                    desc,
+                    Text(status, style=_get_status_style(task.status))
+                )
+            idx += 1
+        table.add_row("", "", "")
+
+    # Queued section
+    if queued:
+        table.add_row("", Text(f"Queued ({len(queued)})", style=f"bold {COLORS['queued']}"), "")
+        for task in queued:
             is_selected = idx == selected_idx
             prefix, desc, status = _format_task_row(task, is_selected)
 
@@ -268,8 +319,14 @@ def _render_task_list(tasks: list["Task"], selected_idx: int) -> None:
                 )
             idx += 1
 
-    # Summary
-    summary = f"{len(active)} active, {len(completed)} completed"
+    # Summary with queued count
+    running_count = len(running)
+    queued_count = len(queued)
+    summary_parts = [f"{running_count} running"]
+    if queued_count > 0:
+        summary_parts.append(f"{queued_count} queued")
+    summary_parts.append(f"{len(completed)} completed")
+    summary = ", ".join(summary_parts)
 
     # Help line
     help_text = Text()
@@ -370,10 +427,17 @@ def format_tasks_summary() -> str:
         return "No background tasks."
 
     lines = []
-    active = manager.get_active_tasks()
+    # Running tasks (not queued)
+    running = [t for t in tasks if t.status == TaskStatus.RUNNING]
+    queued = manager.get_queued_tasks()
     completed = manager.get_completed_tasks()
 
-    lines.append(f"Background Tasks: {len(active)} active, {len(completed)} completed")
+    # Build summary line with queued count
+    summary_parts = [f"{len(running)} running"]
+    if len(queued) > 0:
+        summary_parts.append(f"{len(queued)} queued")
+    summary_parts.append(f"{len(completed)} completed")
+    lines.append(f"Background Tasks: {', '.join(summary_parts)}")
     lines.append("")
 
     for task in tasks[:10]:
@@ -383,6 +447,7 @@ def format_tasks_summary() -> str:
             TaskStatus.FAILED: "✗",
             TaskStatus.KILLED: "○",
             TaskStatus.PENDING: "·",
+            TaskStatus.QUEUED: "⏳",
         }.get(task.status, "?")
 
         lines.append(f"  {status_icon} [{task.id}] {task.description}")
