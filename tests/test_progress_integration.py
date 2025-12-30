@@ -52,7 +52,7 @@ class TestWebSearchProgressIntegration:
             mock_settings.has_tavily = True
             mock_settings.tavily_api_key = "test-key"
 
-            with patch("kai_code.tools.web.TavilyClient", return_value=mock_client):
+            with patch("tavily.TavilyClient", return_value=mock_client):
                 from kai_code.tools.web import web_search
 
                 result = web_search("test query", max_results=5)

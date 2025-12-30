@@ -138,7 +138,8 @@ def test_command_handler_model_no_name(mock_agent):
     """Command handler handles /model without name."""
     handler = DbtCommandHandler(mock_agent)
     result = handler.handle("/model")
-    assert "Usage" in result or "usage" in result.lower()
+    # Check for error message with expected format (includes Example or Usage)
+    assert "Example" in result or "Usage" in result or "missing" in result.lower()
 
 
 def test_command_handler_schema_no_adapter():

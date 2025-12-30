@@ -385,7 +385,7 @@ class TestFormatStatusText:
         # Verify order: phase, message, percent
         assert "Connecting" in text
         assert "Searching for results" in text
-        assert "[43%]" in text  # Rounded
+        assert "[42%]" in text  # Formatted with :.0f (Python rounds 42.5 to 42)
 
 
 class TestGetSpinnerForPhase:

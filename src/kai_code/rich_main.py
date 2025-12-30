@@ -28,10 +28,11 @@ from kai_code.rich_input import (
     ImageTracker,
     create_prompt_session,
 )
-from kai_code.cli_ui import TokenTracker, show_interactive_help
+from kai_code.cli_ui import TokenTracker, show_interactive_help, render_quick_start_panel
+from kai_code.onboarding import is_first_time_user, mark_onboarding_complete
 from kai_code.tasks import get_task_manager
 from kai_code.model_selector import show_model_selector, get_available_models, format_current_model
-from kai_code.model import resolve_model, get_default_model, get_context_limit
+from kai_code.model import resolve_model, get_default_model
 
 if TYPE_CHECKING:
     from kai_code.agent import KaiAgent
@@ -140,29 +141,26 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         help="Maximum total tokens to use (default: 500000)",
     )
 
-    # Token indicator display flags
-    token_group = parser.add_mutually_exclusive_group()
-    token_group.add_argument(
-        "--show-tokens",
+    parser.add_argument(
+        "--show-quick-start",
         action="store_true",
-        dest="show_tokens",
-        default=None,
-        help="Show token usage indicator in status bar",
-    )
-    token_group.add_argument(
-        "--no-tokens",
-        action="store_false",
-        dest="show_tokens",
-        help="Hide token usage indicator in status bar",
+        help="Force showing the Quick Start panel even if onboarding is complete",
     )
 
     return parser.parse_args(args)
 
 
 def _show_startup_banner(session_state: SessionState) -> None:
-    """Display the startup banner and status information."""
+    """Display the startup banner and status information.
+
+    For first-time users, also displays the Quick Start panel to highlight
+    key features and shortcuts.
+    """
     if session_state.no_splash:
         return
+
+    # Check if this is a first-time user before showing anything
+    first_time = is_first_time_user()
 
     # Display ASCII art banner
     console.print(KAI_CODE_ASCII, style=COLORS["primary"])
@@ -189,8 +187,20 @@ def _show_startup_banner(session_state: SessionState) -> None:
         console.print("Web search: Tavily enabled", style="dim")
 
     console.print()
-    console.print("Type /help for commands, Ctrl+C twice to exit.", style="dim")
-    console.print()
+
+    # Show Quick Start panel for first-time users or if forced via CLI flag
+    if first_time or session_state.show_quick_start:
+        render_quick_start_panel()
+        # Mark onboarding complete so panel won't show again automatically
+        if first_time:
+            mark_onboarding_complete()
+    else:
+        # Show helpful quick reference for returning users
+        console.print(
+            "Type /help for commands, @file to inject files, Ctrl+C twice to exit.",
+            style="dim"
+        )
+        console.print()
 
 
 def _get_model_string(model_id: str | None = None) -> str:
@@ -369,11 +379,6 @@ async def simple_cli(
     token_tracker = TokenTracker()
     image_tracker = ImageTracker()
 
-    # Set context limit based on the selected model
-    if session_state.model:
-        context_limit = get_context_limit(session_state.model)
-        token_tracker.set_context_limit(context_limit)
-
     # Background task callback for Ctrl+B
     def on_background_task(text: str, is_shell: bool) -> None:
         """Handle Ctrl+B to run task in background."""
@@ -394,7 +399,6 @@ async def simple_cli(
         session_state,
         image_tracker=image_tracker,
         background_task_callback=on_background_task,
-        token_tracker=token_tracker,
     )
 
     # Handle initial prompt if provided
@@ -428,7 +432,7 @@ async def simple_cli(
                 continue
 
             if user_input.startswith("/"):
-                result = handle_command(user_input, kai_agent, token_tracker, session_state)
+                result = handle_command(user_input, kai_agent, token_tracker)
                 if result == "exit":
                     # Clean up background tasks
                     killed = task_manager.kill_all()
@@ -450,9 +454,6 @@ async def simple_cli(
                                 yolo=False, model=selected.id
                             )
                             session_state.model = current_model
-                            # Update context limit for the new model
-                            context_limit = get_context_limit(current_model)
-                            token_tracker.set_context_limit(context_limit)
                             console.print(f"[green]Model switched to: {format_current_model(current_model)}[/green]")
                         except Exception as e:
                             console.print(f"[red]Failed to switch model: {e}[/red]")
@@ -527,7 +528,7 @@ def main(args: list[str] | None = None) -> int:
         auto_approve=parsed.auto_approve,
         no_splash=parsed.no_splash,
         model=parsed.model,
-        show_tokens=parsed.show_tokens,
+        show_quick_start=parsed.show_quick_start,
     )
 
     # Get initial prompt from positional arguments
