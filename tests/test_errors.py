@@ -1519,7 +1519,7 @@ class TestMakeApiKeyMissingError:
         renderer = ErrorRenderer()
         output = renderer.render_to_string(error)
 
-        assert "API key" in output.lower()
+        assert "api key" in output.lower()
         assert "Suggestions:" in output
 
 
@@ -1760,7 +1760,7 @@ class TestErrorBuilderOutputFormatting:
         output = renderer.render_to_string(error)
 
         # Verify comprehensive output
-        assert "API key" in output.lower()
+        assert "api key" in output.lower()
         assert "ANTHROPIC_API_KEY" in output
         assert "Suggestions:" in output
         assert "Try these commands:" in output

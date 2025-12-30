@@ -14,6 +14,12 @@ from .banner import DBT_ASCII_BANNER, create_startup_info, format_schema_summary
 from .config import DbtCliConfig, load_config, find_dbt_project
 from .commands import DbtCommandHandler
 from kai_code.rich_config import COLORS
+from kai_code.errors import ActionableError, ErrorType, render_error
+from kai_code.error_suggestions import (
+    make_dbt_connection_error,
+    make_model_not_available_error,
+    PROVIDER_API_KEY_INSTRUCTIONS,
+)
 
 if TYPE_CHECKING:
     from .agent import DbtAgent
@@ -351,7 +357,35 @@ async def dbt_cli_loop(
                 image_tracker=image_tracker,
             )
         except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
+            error_str = str(e).lower()
+            suggestions = [
+                "Check if the prompt is valid for dbt operations",
+                "Verify your database connection is working",
+            ]
+
+            # Add context-specific suggestions based on error content
+            if "dbt" in error_str:
+                suggestions.append("Run 'dbt debug' to verify dbt configuration")
+            if "connection" in error_str or "database" in error_str:
+                suggestions.append("Check your database connection settings")
+            if "api" in error_str or "key" in error_str:
+                suggestions.append("Verify your API key is set correctly")
+
+            error = ActionableError(
+                error_type=ErrorType.COMMAND_EXECUTION_ERROR,
+                message=f"Error executing prompt: {e}",
+                suggestions=suggestions,
+                recovery_commands=[
+                    "dbt debug",
+                    "/help",
+                ],
+                severity="warning",
+                context={
+                    "prompt": initial_prompt[:100] if len(initial_prompt) > 100 else initial_prompt,
+                    "error_details": str(e),
+                },
+            )
+            render_error(error, console=console)
 
     # Main loop
     while True:
@@ -383,7 +417,7 @@ async def dbt_cli_loop(
                     break
                 if fallback_result == "model_select":
                     # Handle interactive model selection
-                    from kai_code.model_selector import show_model_selector, format_current_model
+                    from kai_code.model_selector import show_model_selector, format_current_model, get_available_models
 
                     selected = show_model_selector(current_model=session_state.model)
                     if selected and selected.handle != session_state.model:
@@ -403,7 +437,29 @@ async def dbt_cli_loop(
                             session_state.model = selected.handle
                             console.print(f"[green]Model switched to: {format_current_model(selected.handle)}[/green]")
                         except Exception as e:
-                            console.print(f"[red]Failed to switch model: {e}[/red]")
+                            # Get available models for suggestions
+                            available_models = get_available_models()
+                            available_model_ids = [m.id for m in available_models]
+
+                            error = make_model_not_available_error(
+                                model=selected.id,
+                                available_models=available_model_ids,
+                            )
+                            # Override the message to be more specific about the switch failure
+                            error = ActionableError(
+                                error_type=ErrorType.MODEL_NOT_AVAILABLE,
+                                message=f"Failed to switch to model '{selected.id}': {e}",
+                                suggestions=error.suggestions,
+                                recovery_commands=error.recovery_commands,
+                                related_items=error.related_items,
+                                severity="warning",
+                                context={
+                                    "requested_model": selected.id,
+                                    "current_model": session_state.model or "none",
+                                    "error_details": str(e),
+                                },
+                            )
+                            render_error(error, console=console)
                     continue
                 if fallback_result is None:
                     continue
@@ -428,7 +484,39 @@ async def dbt_cli_loop(
                     image_tracker=image_tracker,
                 )
             except Exception as e:
-                console.print(f"[red]Error: {e}[/red]")
+                error_str = str(e).lower()
+                suggestions = [
+                    "Check if your request is valid for dbt operations",
+                    "Try rephrasing your prompt",
+                ]
+
+                # Add context-specific suggestions based on error content
+                if "dbt" in error_str:
+                    suggestions.append("Run 'dbt debug' to verify dbt configuration")
+                if "connection" in error_str or "database" in error_str:
+                    suggestions.append("Check your database connection settings")
+                if "model" in error_str:
+                    suggestions.append("Verify the model name exists in your dbt project")
+                if "api" in error_str or "key" in error_str or "auth" in error_str:
+                    suggestions.append("Verify your API key is set correctly")
+                if "timeout" in error_str:
+                    suggestions.append("The request timed out - try again or simplify the task")
+
+                error = ActionableError(
+                    error_type=ErrorType.COMMAND_EXECUTION_ERROR,
+                    message=f"Error executing task: {e}",
+                    suggestions=suggestions,
+                    recovery_commands=[
+                        "dbt debug",
+                        "/help",
+                    ],
+                    severity="warning",
+                    context={
+                        "user_input": user_input[:100] if len(user_input) > 100 else user_input,
+                        "error_details": str(e),
+                    },
+                )
+                render_error(error, console=console)
 
         except KeyboardInterrupt:
             console.print()
@@ -504,10 +592,23 @@ def main(args: list[str] | None = None) -> int:
     except Exception as e:
         # Warn and continue without db if connection failed
         if config.connection:
-            console.print(
-                f"[yellow]Warning: Could not connect to database: {e}[/yellow]"
+            # Use DBT-specific connection error
+            conn_error = make_dbt_connection_error(
+                connection_string=config.connection,
+                error_details=str(e),
             )
-            console.print("[yellow]Continuing without database connection.[/yellow]")
+            # Override severity to warning since we'll continue without DB
+            conn_error = ActionableError(
+                error_type=conn_error.error_type,
+                message=conn_error.message,
+                suggestions=conn_error.suggestions + ["Continuing without database connection..."],
+                recovery_commands=conn_error.recovery_commands,
+                related_items=conn_error.related_items,
+                severity="warning",
+                context=conn_error.context,
+            )
+            render_error(conn_error, console=console)
+
             try:
                 agent, graph = _create_dbt_agent(
                     project_dir=project_dir,
@@ -518,10 +619,70 @@ def main(args: list[str] | None = None) -> int:
                     model=parsed.model,
                 )
             except Exception as e2:
-                console.print(f"[red]Error creating agent: {e2}[/red]")
+                # Build agent creation error with context-specific suggestions
+                error_str = str(e2).lower()
+                suggestions = [
+                    "Check if all dependencies are installed correctly",
+                    "Verify your dbt project configuration",
+                ]
+                recovery_commands = ["dbt debug", "kai-dbt --help"]
+
+                # Add context-specific suggestions
+                if "api" in error_str or "key" in error_str or "auth" in error_str:
+                    for provider, info in PROVIDER_API_KEY_INSTRUCTIONS.items():
+                        if provider != "ollama" and info.get("env_var"):
+                            suggestions.append(f"Set {info['env_var']} for {info['description']} models")
+                            recovery_commands.append(f"export {info['env_var']}=your-key-here")
+                            break
+                if parsed.model:
+                    suggestions.insert(0, f"Check if model '{parsed.model}' is available")
+
+                error = ActionableError(
+                    error_type=ErrorType.AGENT_CREATION_ERROR,
+                    message=f"Failed to create dbt agent: {e2}",
+                    suggestions=suggestions,
+                    recovery_commands=recovery_commands,
+                    severity="error",
+                    context={
+                        "requested_model": parsed.model or "default",
+                        "project_dir": str(project_dir),
+                        "error_details": str(e2),
+                    },
+                )
+                render_error(error, console=console)
                 return 1
         else:
-            console.print(f"[red]Error creating agent: {e}[/red]")
+            # Build agent creation error with context-specific suggestions
+            error_str = str(e).lower()
+            suggestions = [
+                "Check if all dependencies are installed correctly",
+                "Verify your dbt project configuration",
+            ]
+            recovery_commands = ["dbt debug", "kai-dbt --help"]
+
+            # Add context-specific suggestions
+            if "api" in error_str or "key" in error_str or "auth" in error_str:
+                for provider, info in PROVIDER_API_KEY_INSTRUCTIONS.items():
+                    if provider != "ollama" and info.get("env_var"):
+                        suggestions.append(f"Set {info['env_var']} for {info['description']} models")
+                        recovery_commands.append(f"export {info['env_var']}=your-key-here")
+                        break
+            if parsed.model:
+                suggestions.insert(0, f"Check if model '{parsed.model}' is available")
+
+            error = ActionableError(
+                error_type=ErrorType.AGENT_CREATION_ERROR,
+                message=f"Failed to create dbt agent: {e}",
+                suggestions=suggestions,
+                recovery_commands=recovery_commands,
+                severity="error",
+                context={
+                    "requested_model": parsed.model or "default",
+                    "project_dir": str(project_dir),
+                    "error_details": str(e),
+                },
+            )
+            render_error(error, console=console)
             return 1
 
     # Show banner
@@ -575,7 +736,27 @@ def main(args: list[str] | None = None) -> int:
         console.print("\nGoodbye!", style="dim")
         return 0
     except Exception as e:
-        console.print(f"[red]Fatal error: {e}[/red]")
+        error = ActionableError(
+            error_type=ErrorType.INTERNAL_ERROR,
+            message=f"Fatal error: {e}",
+            suggestions=[
+                "Check if all dependencies are installed correctly",
+                "Verify your dbt project configuration is valid",
+                "Try running with a different model using --model",
+                "Check for any environment variable issues",
+            ],
+            recovery_commands=[
+                "pip install -U kai-code",
+                "dbt debug",
+                "kai-dbt --help",
+            ],
+            severity="error",
+            context={
+                "error_type": type(e).__name__,
+                "error_details": str(e),
+            },
+        )
+        render_error(error, console=console)
         return 1
     finally:
         if agent and agent.adapter:
