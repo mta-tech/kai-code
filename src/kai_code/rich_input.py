@@ -26,8 +26,6 @@ from prompt_toolkit.key_binding import KeyBindings
 
 from .rich_config import COLORS, COMMANDS, SessionState, ShortcutContext, console
 from .image_utils import ImageData, get_clipboard_image
-from .errors import ActionableError, ErrorType, render_error
-from .error_suggestions import suggest_files
 
 # Type for background task callback
 BackgroundTaskCallback = Callable[[str, bool], None]  # (text, is_shell) -> None
@@ -37,6 +35,141 @@ AT_MENTION_RE = re.compile(r"@(?P<path>(?:[^\s@]|(?<=\\)\s)*)$")
 SLASH_COMMAND_RE = re.compile(r"^/(?P<command>[a-z]*)$")
 
 EXIT_CONFIRM_WINDOW = 3.0
+
+
+@dataclass
+class RotatingHint:
+    """Represents a single hint that can be displayed in the rotating hint area.
+
+    Attributes:
+        key: The key or trigger (e.g., "@", "/").
+        description: Short description for toolbar display (e.g., "files", "commands").
+        shortcut_id: Optional ID in KEYBOARD_SHORTCUTS registry for consistent formatting.
+    """
+
+    key: str
+    description: str
+    shortcut_id: str | None = None
+
+
+class RotatingHintHelper:
+    """Manages rotating through secondary hints to keep toolbar compact.
+
+    This helper cycles through a set of secondary hints (like "@ files",
+    "/help commands") on a timer. Only one hint is shown at a time to
+    save space, but all hints are eventually displayed through rotation.
+
+    Attributes:
+        hints: List of RotatingHint objects to cycle through.
+        rotation_interval: Seconds between hint rotations (default 5.0).
+        current_index: Index of the currently displayed hint.
+        last_rotation_time: Monotonic time of the last rotation.
+    """
+
+    def __init__(
+        self,
+        hints: list[RotatingHint] | None = None,
+        rotation_interval: float = 5.0,
+    ) -> None:
+        """Initialize the rotating hint helper.
+
+        Args:
+            hints: List of hints to rotate through. If None, uses default hints.
+            rotation_interval: Seconds between automatic rotations.
+        """
+        self.hints = hints or self._default_hints()
+        self.rotation_interval = rotation_interval
+        self.current_index = 0
+        self.last_rotation_time = time.monotonic()
+
+    @staticmethod
+    def _default_hints() -> list[RotatingHint]:
+        """Get the default set of secondary hints to rotate.
+
+        Returns:
+            List of RotatingHint objects for common discoverable features.
+        """
+        return [
+            RotatingHint(key="@", description="files", shortcut_id="at_mention"),
+            RotatingHint(key="/", description="commands", shortcut_id="slash_command"),
+        ]
+
+    def get_current_hint(self) -> RotatingHint:
+        """Get the currently active hint.
+
+        Automatically advances to the next hint if the rotation interval
+        has elapsed since the last rotation.
+
+        Returns:
+            The current RotatingHint to display.
+        """
+        if not self.hints:
+            return RotatingHint(key="", description="")
+
+        # Check if it's time to rotate
+        now = time.monotonic()
+        elapsed = now - self.last_rotation_time
+
+        if elapsed >= self.rotation_interval:
+            # Calculate how many rotations should have happened
+            rotations = int(elapsed / self.rotation_interval)
+            self.current_index = (self.current_index + rotations) % len(self.hints)
+            self.last_rotation_time = now
+
+        return self.hints[self.current_index]
+
+    def advance(self) -> RotatingHint:
+        """Manually advance to the next hint.
+
+        This can be called on input events to cycle hints more quickly
+        when the user is actively interacting.
+
+        Returns:
+            The new current RotatingHint after advancing.
+        """
+        if not self.hints:
+            return RotatingHint(key="", description="")
+
+        self.current_index = (self.current_index + 1) % len(self.hints)
+        self.last_rotation_time = time.monotonic()
+        return self.hints[self.current_index]
+
+    def format_current_hint(self, include_separator: bool = True) -> list[tuple[str, str]]:
+        """Format the current hint for toolbar display.
+
+        Uses format_shortcut_from_registry if the hint has a shortcut_id,
+        otherwise falls back to format_shortcut_hint for consistent styling.
+
+        Args:
+            include_separator: Whether to include a leading separator " | ".
+
+        Returns:
+            List of (style_class, text) tuples for prompt_toolkit formatted text.
+        """
+        hint = self.get_current_hint()
+
+        if hint.shortcut_id:
+            return format_shortcut_from_registry(hint.shortcut_id, include_separator)
+        elif hint.key and hint.description:
+            return format_shortcut_hint(hint.key, hint.description, include_separator)
+        else:
+            return []
+
+
+# Global instance of the rotating hint helper for toolbar use
+_rotating_hint_helper: RotatingHintHelper | None = None
+
+
+def get_rotating_hint_helper() -> RotatingHintHelper:
+    """Get or create the global rotating hint helper instance.
+
+    Returns:
+        The global RotatingHintHelper instance.
+    """
+    global _rotating_hint_helper
+    if _rotating_hint_helper is None:
+        _rotating_hint_helper = RotatingHintHelper()
+    return _rotating_hint_helper
 
 
 @dataclass
@@ -98,9 +231,10 @@ class ToolbarSegment:
     Attributes:
         parts: List of (style_class, text) tuples for prompt_toolkit.
         priority: Display priority (1=highest, higher numbers=lower priority).
-                  Priority 1-2: Critical (model, status)
-                  Priority 3: Contextual hints
-                  Priority 4-5: General hints
+                  Priority 1: Critical state (BASH MODE, exit hint, tasks, auto-approve)
+                  Priority 2: Contextual hints (ESC ESC cancel, Alt+Enter newline)
+                  Priority 3: Rotating general hints (Ctrl+B, Ctrl+E, @ files, / commands)
+                  Priority 4: Model display (truncated first when space is limited)
         include_separator: Whether this segment includes a leading separator.
     """
 
@@ -179,11 +313,11 @@ def truncate_toolbar_segments(
     Segments are sorted by priority (lower number = higher priority).
     Lower-priority segments are removed first when space is limited.
 
-    Priority order:
-    1. Model display (priority 1)
-    2. Status indicators like BASH MODE, auto-approve (priority 2)
-    3. Contextual hints like ESC ESC cancel (priority 3)
-    4. General hints like Ctrl+E editor (priority 4-5)
+    Priority order (lower number = higher priority):
+    1. Critical state - BASH MODE, exit hint, tasks, auto-approve (priority 1)
+    2. Contextual hints - ESC ESC cancel, Alt+Enter newline (priority 2)
+    3. Rotating general hints - @ files, / commands, Ctrl+B, Ctrl+E (priority 3)
+    4. Model display (priority 4) - shows last, truncated first
 
     Args:
         segments: List of ToolbarSegment objects to display.
@@ -471,48 +605,9 @@ def parse_file_mentions(text: str) -> tuple[str, list[Path]]:
             if path.exists() and path.is_file():
                 files.append(path)
             else:
-                # Build actionable error with similar file suggestions
-                search_dir = path.parent if path.parent.exists() else Path.cwd()
-                similar_files = suggest_files(path, search_dir=search_dir, n=3, cutoff=0.5)
-
-                suggestions = [
-                    "Check if the file path is spelled correctly",
-                    "Verify the file exists in the expected location",
-                ]
-
-                # Add search directory info
-                if search_dir.exists():
-                    suggestions.append(f"Searching in: {search_dir}")
-
-                error = ActionableError(
-                    error_type=ErrorType.FILE_NOT_FOUND,
-                    message=f"File not found: {match}",
-                    suggestions=suggestions,
-                    related_items=similar_files,
-                    severity="warning",
-                    context={
-                        "path": str(path),
-                        "search_dir": str(search_dir),
-                    },
-                )
-                render_error(error, console=console)
+                console.print(f"[yellow]Warning: File not found: {match}[/yellow]")
         except Exception as e:
-            # Build actionable error for invalid path
-            error = ActionableError(
-                error_type=ErrorType.FILE_NOT_FOUND,
-                message=f"Invalid path: {match}",
-                suggestions=[
-                    "Check if the path contains valid characters",
-                    "Ensure the path format is correct for your operating system",
-                    f"Error details: {e}",
-                ],
-                severity="warning",
-                context={
-                    "path": match,
-                    "error": str(e),
-                },
-            )
-            render_error(error, console=console)
+            console.print(f"[yellow]Warning: Invalid path {match}: {e}[/yellow]")
 
     return text, files
 
@@ -542,11 +637,11 @@ def get_bottom_toolbar(
     position, and completion menu state.
 
     Smart truncation is applied when content exceeds terminal width.
-    Priority order (highest to lowest):
-    1. Model display (priority 1)
-    2. Status indicators - BASH MODE, auto-approve, exit hint, tasks (priority 2)
-    3. Contextual hints - ESC ESC cancel (priority 3)
-    4. General hints - Ctrl+B background, Ctrl+E editor (priority 4-5)
+    Priority order (lower number = higher priority):
+    1. Critical state - BASH MODE, exit hint, tasks, auto-approve (priority 1)
+    2. Contextual hints - ESC ESC cancel, Alt+Enter newline (priority 2)
+    3. Rotating general hints - @ files, / commands, Ctrl+B, Ctrl+E (priority 3)
+    4. Model display (priority 4) - shows last, truncated first
     """
 
     def toolbar() -> list[tuple[str, str]]:
@@ -559,7 +654,7 @@ def get_bottom_toolbar(
         # Get terminal width for truncation
         terminal_width = get_terminal_width()
 
-        # === Priority 1: Model display (highest priority) ===
+        # === Priority 4: Model display (lowest priority - truncated first) ===
         if hasattr(session_state, 'model') and session_state.model:
             try:
                 from .model_selector import format_current_model
@@ -567,13 +662,13 @@ def get_bottom_toolbar(
                 if model_display:
                     segments.append(ToolbarSegment(
                         parts=[("class:toolbar-model", f" {model_display} ")],
-                        priority=1,
+                        priority=4,
                         include_separator=False,  # First segment, no separator
                     ))
             except ImportError:
                 pass
 
-        # === Priority 2: Status indicators ===
+        # === Priority 1: Critical state indicators (highest priority) ===
 
         # BASH mode indicator (critical - tells user they're in shell mode)
         try:
@@ -582,11 +677,24 @@ def get_bottom_toolbar(
                 if current_text.startswith("!"):
                     segments.append(ToolbarSegment(
                         parts=[("bg:#ff1493 fg:#ffffff bold", " BASH MODE ")],
-                        priority=2,
+                        priority=1,
                         include_separator=True,
                     ))
         except (AttributeError, TypeError):
             pass
+
+        # Exit confirmation hint (critical when active)
+        hint_until = session_state.exit_hint_until
+        if hint_until is not None:
+            now = time.monotonic()
+            if now < hint_until:
+                segments.append(ToolbarSegment(
+                    parts=[("class:toolbar-exit", " Ctrl+C again to exit ")],
+                    priority=1,  # Highest priority when active
+                    include_separator=True,
+                ))
+            else:
+                session_state.exit_hint_until = None
 
         # Background task count
         try:
@@ -595,7 +703,7 @@ def get_bottom_toolbar(
             if task_status:
                 segments.append(ToolbarSegment(
                     parts=[("class:toolbar-task", f" {task_status} ")],
-                    priority=2,
+                    priority=1,
                     include_separator=True,
                 ))
         except ImportError:
@@ -611,24 +719,11 @@ def get_bottom_toolbar(
 
         segments.append(ToolbarSegment(
             parts=[(base_class, base_msg)],
-            priority=2,
+            priority=1,
             include_separator=True,
         ))
 
-        # Exit confirmation hint (critical when active)
-        hint_until = session_state.exit_hint_until
-        if hint_until is not None:
-            now = time.monotonic()
-            if now < hint_until:
-                segments.append(ToolbarSegment(
-                    parts=[("class:toolbar-exit", " Ctrl+C again to exit ")],
-                    priority=2,  # High priority when active
-                    include_separator=True,
-                ))
-            else:
-                session_state.exit_hint_until = None
-
-        # === Priority 3: Contextual hints (based on input state) ===
+        # === Priority 2: Contextual hints (based on input state) ===
 
         # When input has text: show ESC ESC cancel
         if input_state.has_text:
@@ -636,7 +731,7 @@ def get_bottom_toolbar(
             if shortcut_parts:
                 segments.append(ToolbarSegment(
                     parts=shortcut_parts,
-                    priority=3,
+                    priority=2,
                     include_separator=True,
                 ))
 
@@ -654,25 +749,40 @@ def get_bottom_toolbar(
             if shortcut_parts:
                 segments.append(ToolbarSegment(
                     parts=shortcut_parts,
-                    priority=3,
+                    priority=2,
                     include_separator=True,
                 ))
 
-        # === Priority 4-5: General hints ===
+        # === Priority 3: Rotating general hints (discoverable features) ===
+        # These hints are lower priority than critical state and contextual hints.
+        # They provide feature discoverability but can be truncated when space is limited.
 
         # Ctrl+B background hint
-        segments.append(ToolbarSegment(
-            parts=[("class:toolbar-hint", "CTRL+B background")],
-            priority=4,
-            include_separator=True,
-        ))
+        shortcut_parts = format_shortcut_from_registry("ctrl_b", include_separator=False)
+        if shortcut_parts:
+            segments.append(ToolbarSegment(
+                parts=shortcut_parts,
+                priority=3,
+                include_separator=True,
+            ))
 
-        # Ctrl+E editor hint (always show - powerful hidden feature)
+        # Ctrl+E editor hint (powerful hidden feature)
         shortcut_parts = format_shortcut_from_registry("ctrl_e", include_separator=False)
         if shortcut_parts:
             segments.append(ToolbarSegment(
                 parts=shortcut_parts,
-                priority=5,
+                priority=3,
+                include_separator=True,
+            ))
+
+        # Rotating hints - show one at a time to keep toolbar compact
+        # Hints cycle through on a timer (e.g., "@ files", "/ commands")
+        rotating_helper = get_rotating_hint_helper()
+        rotating_parts = rotating_helper.format_current_hint(include_separator=False)
+        if rotating_parts:
+            segments.append(ToolbarSegment(
+                parts=rotating_parts,
+                priority=3,
                 include_separator=True,
             ))
 
@@ -852,6 +962,12 @@ def create_prompt_session(
     @kb.add("escape", "enter")
     def _(event) -> None:
         """Alt+Enter inserts a newline for multi-line input."""
+        event.current_buffer.insert_text("\n")
+
+    # Ctrl+J for newlines (alternative to Alt+Enter, standard terminal control code)
+    @kb.add("c-j")
+    def _(event) -> None:
+        """Ctrl+J inserts a newline (alternative to Alt+Enter)."""
         event.current_buffer.insert_text("\n")
 
     @kb.add("escape")
