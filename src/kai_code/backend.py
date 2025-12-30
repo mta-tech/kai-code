@@ -11,6 +11,8 @@ from deepagents.backends.filesystem import FilesystemBackend
 from deepagents.backends.protocol import EditResult, ExecuteResponse, SandboxBackendProtocol, WriteResult
 
 from .permissions import PermissionConfig, permission_denied_message
+from .progress import ProgressPhase, ToolProgress, get_progress_manager
+from .rich_config import rich_settings
 
 
 @dataclass(frozen=True)
@@ -109,21 +111,142 @@ class KaiLocalBackend(FilesystemBackend, SandboxBackendProtocol):
             return permission_denied_message("read_file", {"file_path": file_path})
         if self._permissions is not None and not self._permissions.tool_allowed("read_file"):
             return permission_denied_message("read_file", {"file_path": file_path})
-        return super().read(file_path, offset=offset, limit=limit)
+
+        # Check if progress reporting is enabled and get threshold from settings
+        progress_enabled = rich_settings.progress_enabled
+        file_size_threshold = rich_settings.progress_file_size_threshold
+
+        progress_manager = get_progress_manager()
+        display_name = Path(file_path).name or file_path
+
+        # Check file size for progress reporting
+        file_size = 0
+        if progress_enabled:
+            try:
+                # Resolve path relative to cwd (the root_dir from FilesystemBackend)
+                resolved = file_path.lstrip("/")
+                physical_path = self.cwd / resolved
+                file_size = physical_path.stat().st_size if physical_path.exists() else 0
+            except (OSError, ValueError):
+                file_size = 0
+
+        is_large_file = progress_enabled and file_size >= file_size_threshold
+
+        if is_large_file:
+            # Report starting phase for large files
+            progress_manager.report(
+                ToolProgress(
+                    tool_name="read_file",
+                    status_message=f"Reading {display_name}...",
+                    phase=ProgressPhase.STARTING,
+                    percent_complete=0.0,
+                )
+            )
+
+        # Perform the actual read
+        result = super().read(file_path, offset=offset, limit=limit)
+
+        # Count lines for completion message
+        line_count = len(result.splitlines()) if result else 0
+
+        if is_large_file:
+            # Report completion for large files
+            progress_manager.report(
+                ToolProgress(
+                    tool_name="read_file",
+                    status_message=f"Read {line_count} lines",
+                    phase=ProgressPhase.COMPLETE,
+                    percent_complete=100.0,
+                )
+            )
+
+        return result
 
     def glob_info(self, pattern: str, path: str = "/"):  # type: ignore[override]
         if not self._tool_enabled("glob"):
             return []
         if self._permissions is not None and not self._permissions.tool_allowed("glob"):
             return []
-        return super().glob_info(pattern, path=path)
+
+        # Check if progress reporting is enabled
+        progress_enabled = rich_settings.progress_enabled
+
+        if progress_enabled:
+            progress_manager = get_progress_manager()
+
+            # Report starting phase - searching for pattern
+            progress_manager.report(
+                ToolProgress(
+                    tool_name="glob",
+                    status_message=f"Searching files matching {pattern}...",
+                    phase=ProgressPhase.STARTING,
+                )
+            )
+
+        # Perform the actual glob operation
+        result = super().glob_info(pattern, path=path)
+
+        if progress_enabled:
+            # Count results for completion message
+            match_count = len(result) if result else 0
+
+            # Report completion phase with match count
+            progress_manager.report(
+                ToolProgress(
+                    tool_name="glob",
+                    status_message=f"Found {match_count} matching files",
+                    phase=ProgressPhase.COMPLETE,
+                )
+            )
+
+        return result
 
     def grep_raw(self, pattern: str, path: str | None = None, glob: str | None = None):  # type: ignore[override]
         if not self._tool_enabled("grep"):
             return permission_denied_message("grep", {"path": path, "glob": glob})
         if self._permissions is not None and not self._permissions.tool_allowed("grep"):
             return permission_denied_message("grep", {"path": path, "glob": glob})
-        return super().grep_raw(pattern, path=path, glob=glob)
+
+        # Check if progress reporting is enabled
+        progress_enabled = rich_settings.progress_enabled
+
+        if progress_enabled:
+            progress_manager = get_progress_manager()
+
+            # Build a descriptive message based on search context
+            display_pattern = pattern if len(pattern) <= 30 else pattern[:27] + "..."
+
+            # Report starting phase - searching for pattern
+            progress_manager.report(
+                ToolProgress(
+                    tool_name="grep",
+                    status_message=f'Searching for "{display_pattern}"...',
+                    phase=ProgressPhase.STARTING,
+                )
+            )
+
+        # Perform the actual grep operation
+        result = super().grep_raw(pattern, path=path, glob=glob)
+
+        if progress_enabled:
+            # Count matches for completion message (result is typically a string with matches)
+            if isinstance(result, str):
+                # Count non-empty lines as matches
+                match_lines = [line for line in result.splitlines() if line.strip()]
+                match_count = len(match_lines)
+            else:
+                match_count = 0
+
+            # Report completion phase with match count
+            progress_manager.report(
+                ToolProgress(
+                    tool_name="grep",
+                    status_message=f"Found {match_count} matches",
+                    phase=ProgressPhase.COMPLETE,
+                )
+            )
+
+        return result
 
     def write(self, file_path: str, content: str) -> WriteResult:  # type: ignore[override]
         if not self._tool_enabled("write_file"):
