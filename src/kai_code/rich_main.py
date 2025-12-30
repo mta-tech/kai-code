@@ -28,13 +28,10 @@ from kai_code.rich_input import (
     ImageTracker,
     create_prompt_session,
 )
-from kai_code.cli_ui import TokenTracker, show_interactive_help, render_quick_start_panel
-from kai_code.onboarding import is_first_time_user, mark_onboarding_complete
+from kai_code.cli_ui import TokenTracker, show_interactive_help
 from kai_code.tasks import get_task_manager
 from kai_code.model_selector import show_model_selector, get_available_models, format_current_model
-from kai_code.model import resolve_model, get_default_model
-from kai_code.errors import ActionableError, ErrorType, render_error
-from kai_code.error_suggestions import make_model_not_available_error, PROVIDER_API_KEY_INSTRUCTIONS
+from kai_code.model import resolve_model, get_default_model, get_context_limit
 
 if TYPE_CHECKING:
     from kai_code.agent import KaiAgent
@@ -143,26 +140,29 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         help="Maximum total tokens to use (default: 500000)",
     )
 
-    parser.add_argument(
-        "--show-quick-start",
+    # Token indicator display flags
+    token_group = parser.add_mutually_exclusive_group()
+    token_group.add_argument(
+        "--show-tokens",
         action="store_true",
-        help="Force showing the Quick Start panel even if onboarding is complete",
+        dest="show_tokens",
+        default=None,
+        help="Show token usage indicator in status bar",
+    )
+    token_group.add_argument(
+        "--no-tokens",
+        action="store_false",
+        dest="show_tokens",
+        help="Hide token usage indicator in status bar",
     )
 
     return parser.parse_args(args)
 
 
 def _show_startup_banner(session_state: SessionState) -> None:
-    """Display the startup banner and status information.
-
-    For first-time users, also displays the Quick Start panel to highlight
-    key features and shortcuts.
-    """
+    """Display the startup banner and status information."""
     if session_state.no_splash:
         return
-
-    # Check if this is a first-time user before showing anything
-    first_time = is_first_time_user()
 
     # Display ASCII art banner
     console.print(KAI_CODE_ASCII, style=COLORS["primary"])
@@ -189,20 +189,8 @@ def _show_startup_banner(session_state: SessionState) -> None:
         console.print("Web search: Tavily enabled", style="dim")
 
     console.print()
-
-    # Show Quick Start panel for first-time users or if forced via CLI flag
-    if first_time or session_state.show_quick_start:
-        render_quick_start_panel()
-        # Mark onboarding complete so panel won't show again automatically
-        if first_time:
-            mark_onboarding_complete()
-    else:
-        # Show helpful quick reference for returning users
-        console.print(
-            "Type /help for commands, @file to inject files, Ctrl+C twice to exit.",
-            style="dim"
-        )
-        console.print()
+    console.print("Type /help for commands, Ctrl+C twice to exit.", style="dim")
+    console.print()
 
 
 def _get_model_string(model_id: str | None = None) -> str:
@@ -366,41 +354,10 @@ async def simple_cli(
         model_display = format_current_model(current_model) or current_model
         console.print(f"[dim]Model: {model_display}[/dim]")
     except Exception as e:
-        # Build suggestions based on the error type
-        error_str = str(e).lower()
-        suggestions = [
-            "Check if your API key is correctly configured",
-            "Verify your internet connection",
-            "Try selecting a different model with /model",
-        ]
-        recovery_commands = ["/models"]
+        console.print(f"[red]Error creating agent: {e}[/red]")
+        import traceback
 
-        # Add provider-specific suggestions if this looks like an API key issue
-        if "api" in error_str or "key" in error_str or "auth" in error_str:
-            for provider, info in PROVIDER_API_KEY_INSTRUCTIONS.items():
-                if provider != "ollama" and info.get("env_var"):
-                    suggestions.append(
-                        f"Set {info['env_var']} for {info['description']} models"
-                    )
-                    recovery_commands.append(f"export {info['env_var']}=your-key-here")
-                    break
-
-        # Add model-specific suggestion if model name is in the error
-        if session_state.model:
-            suggestions.insert(0, f"Check if model '{session_state.model}' is available")
-
-        error = ActionableError(
-            error_type=ErrorType.AGENT_CREATION_ERROR,
-            message=f"Failed to create agent: {e}",
-            suggestions=suggestions,
-            recovery_commands=recovery_commands,
-            severity="error",
-            context={
-                "requested_model": session_state.model or "default",
-                "error_details": str(e),
-            },
-        )
-        render_error(error, console=console)
+        traceback.print_exc()
         return
 
     # Configure task manager
@@ -411,6 +368,11 @@ async def simple_cli(
     # Create token tracker and image tracker
     token_tracker = TokenTracker()
     image_tracker = ImageTracker()
+
+    # Set context limit based on the selected model
+    if session_state.model:
+        context_limit = get_context_limit(session_state.model)
+        token_tracker.set_context_limit(context_limit)
 
     # Background task callback for Ctrl+B
     def on_background_task(text: str, is_shell: bool) -> None:
@@ -432,6 +394,7 @@ async def simple_cli(
         session_state,
         image_tracker=image_tracker,
         background_task_callback=on_background_task,
+        token_tracker=token_tracker,
     )
 
     # Handle initial prompt if provided
@@ -465,7 +428,7 @@ async def simple_cli(
                 continue
 
             if user_input.startswith("/"):
-                result = handle_command(user_input, kai_agent, token_tracker)
+                result = handle_command(user_input, kai_agent, token_tracker, session_state)
                 if result == "exit":
                     # Clean up background tasks
                     killed = task_manager.kill_all()
@@ -487,31 +450,12 @@ async def simple_cli(
                                 yolo=False, model=selected.id
                             )
                             session_state.model = current_model
+                            # Update context limit for the new model
+                            context_limit = get_context_limit(current_model)
+                            token_tracker.set_context_limit(context_limit)
                             console.print(f"[green]Model switched to: {format_current_model(current_model)}[/green]")
                         except Exception as e:
-                            # Get available models for suggestions
-                            available_models = get_available_models()
-                            available_model_ids = [m.id for m in available_models]
-
-                            error = make_model_not_available_error(
-                                model=selected.id,
-                                available_models=available_model_ids,
-                            )
-                            # Override the message to be more specific about the switch failure
-                            error = ActionableError(
-                                error_type=ErrorType.MODEL_NOT_AVAILABLE,
-                                message=f"Failed to switch to model '{selected.id}': {e}",
-                                suggestions=error.suggestions,
-                                recovery_commands=error.recovery_commands,
-                                related_items=error.related_items,
-                                severity="warning",
-                                context={
-                                    "requested_model": selected.id,
-                                    "current_model": session_state.model or "none",
-                                    "error_details": str(e),
-                                },
-                            )
-                            render_error(error, console=console)
+                            console.print(f"[red]Failed to switch model: {e}[/red]")
                     continue
                 if result is None:
                     continue
@@ -583,7 +527,7 @@ def main(args: list[str] | None = None) -> int:
         auto_approve=parsed.auto_approve,
         no_splash=parsed.no_splash,
         model=parsed.model,
-        show_quick_start=parsed.show_quick_start,
+        show_tokens=parsed.show_tokens,
     )
 
     # Get initial prompt from positional arguments
@@ -636,26 +580,7 @@ def main(args: list[str] | None = None) -> int:
         console.print("\nGoodbye!", style=COLORS["dim"])
         return 0
     except Exception as e:
-        error = ActionableError(
-            error_type=ErrorType.INTERNAL_ERROR,
-            message=f"Fatal error: {e}",
-            suggestions=[
-                "Check if all dependencies are installed correctly",
-                "Verify your configuration files are valid",
-                "Try running with a different model using --model",
-                "Check for any environment variable issues",
-            ],
-            recovery_commands=[
-                "pip install -U kai-code",
-                "kai --help",
-            ],
-            severity="error",
-            context={
-                "error_type": type(e).__name__,
-                "error_details": str(e),
-            },
-        )
-        render_error(error, console=console)
+        console.print(f"[red]Fatal error: {e}[/red]")
         return 1
 
 

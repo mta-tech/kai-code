@@ -6,7 +6,6 @@ This module bridges kai-code's settings with deepagents-cli patterns.
 import os
 import uuid
 from dataclasses import dataclass
-from enum import Enum
 from pathlib import Path
 
 import dotenv
@@ -22,6 +21,10 @@ COLORS = {
     "agent": "#10b981",
     "thinking": "#34d399",
     "tool": "#fbbf24",
+    # Token usage indicator colors
+    "token_normal": "#10b981",  # Green - safe, plenty of context remaining
+    "token_warning": "#fbbf24",  # Yellow - approaching limit (80-95%)
+    "token_critical": "#ef4444",  # Red - near limit (>95%)
 }
 
 # ASCII art banner for Kai Code
@@ -47,125 +50,14 @@ COMMANDS = {
     "help": "Show help information",
     "model": "Select or switch model",
     "models": "List available models",
-    "quickstart": "Show Quick Start panel with key features",
     "skills": "List available skills",
     "tasks": "Show background tasks panel",
-    "tokens": "Show token usage for current session",
-    "export-settings": "Export settings to file (default: kai-settings.json)",
-    "import-settings": "Import settings from file (--target global|project|local)",
+    "tokens": "Show token usage; toggle real-time indicator (show/hide)",
     "ralph-loop": "Start Ralph autonomous loop",
     "ralph-status": "Show Ralph loop status",
     "cancel-ralph": "Cancel active Ralph loop",
     "quit": "Exit the CLI",
     "exit": "Exit the CLI",
-}
-
-class ShortcutContext(Enum):
-    """Defines when a keyboard shortcut should be displayed in the toolbar.
-
-    These contexts control the visibility of shortcut hints based on the
-    current input state, enabling contextual discovery of relevant shortcuts.
-
-    Attributes:
-        ALWAYS: Show this shortcut hint at all times (e.g., Ctrl+E editor).
-        HAS_INPUT: Show only when there is text in the input buffer (e.g., ESC ESC cancel).
-        MULTI_LINE: Show only when input spans multiple lines (e.g., Ctrl+J newline).
-        EDITING: Show when actively editing text (cursor in middle of text).
-        COMPLETION_ACTIVE: Show only when the completion menu is visible.
-    """
-
-    ALWAYS = "always"
-    HAS_INPUT = "has_input"
-    MULTI_LINE = "multi_line"
-    EDITING = "editing"
-    COMPLETION_ACTIVE = "completion_active"
-
-
-# Keyboard shortcuts registry for toolbar display and discoverability
-# Each shortcut has:
-#   - key: The key combination (e.g., "Ctrl+E")
-#   - description: Full description for help text
-#   - display: Short text for toolbar display (e.g., "editor")
-#   - context: ShortcutContext enum value controlling when to show in toolbar
-#   - priority: Display priority (1=highest, 10=lowest) - higher priority shown first when space is limited
-KEYBOARD_SHORTCUTS = {
-    "ctrl_e": {
-        "key": "Ctrl+E",
-        "description": "Open current input in external editor (nano by default)",
-        "display": "editor",
-        "context": ShortcutContext.ALWAYS,
-        "priority": 3,
-    },
-    "ctrl_t": {
-        "key": "Ctrl+T",
-        "description": "Toggle auto-approve mode for tool execution",
-        "display": "toggle approve",
-        "context": ShortcutContext.ALWAYS,
-        "priority": 1,
-    },
-    "ctrl_b": {
-        "key": "Ctrl+B",
-        "description": "Run current input as a background task",
-        "display": "background",
-        "context": ShortcutContext.ALWAYS,
-        "priority": 2,
-    },
-    "double_esc": {
-        "key": "ESC ESC",
-        "description": "Cancel current input and clear the buffer",
-        "display": "cancel",
-        "context": ShortcutContext.HAS_INPUT,
-        "priority": 4,
-    },
-    "alt_enter": {
-        "key": "Alt+Enter",
-        "description": "Insert newline for multi-line input (ESC then Enter, or Option+Enter on Mac)",
-        "display": "newline",
-        "context": ShortcutContext.ALWAYS,
-        "priority": 5,
-    },
-    "enter": {
-        "key": "Enter",
-        "description": "Submit the current input",
-        "display": "submit",
-        "context": ShortcutContext.HAS_INPUT,
-        "priority": 1,
-    },
-    "ctrl_c": {
-        "key": "Ctrl+C",
-        "description": "Cancel input or interrupt the agent (double-press to exit)",
-        "display": "interrupt",
-        "context": ShortcutContext.ALWAYS,
-        "priority": 6,
-    },
-    "at_mention": {
-        "key": "@",
-        "description": "Type @ followed by path to auto-complete and inject file content",
-        "display": "files",
-        "context": ShortcutContext.ALWAYS,
-        "priority": 7,
-    },
-    "slash_command": {
-        "key": "/",
-        "description": "Type / at start to access commands like /help, /model, /tasks",
-        "display": "commands",
-        "context": ShortcutContext.ALWAYS,
-        "priority": 8,
-    },
-    "arrow_keys": {
-        "key": "↑↓←→",
-        "description": "Navigate within the input buffer",
-        "display": "navigate",
-        "context": ShortcutContext.HAS_INPUT,
-        "priority": 10,
-    },
-    "ctrl_j": {
-        "key": "Ctrl+J",
-        "description": "Insert newline (alternative to Alt+Enter)",
-        "display": "newline",
-        "context": ShortcutContext.MULTI_LINE,
-        "priority": 9,
-    },
 }
 
 # Maximum argument length for display
@@ -369,6 +261,23 @@ class RichSettings:
 rich_settings = RichSettings.from_environment()
 
 
+def _parse_bool_env(env_var: str, default: bool = True) -> bool:
+    """Parse a boolean environment variable.
+
+    Args:
+        env_var: Name of the environment variable
+        default: Default value if not set
+
+    Returns:
+        Boolean value based on environment variable
+    """
+    value = os.environ.get(env_var)
+    if value is None:
+        return default
+    # Treat "0", "false", "no", "off" as False (case insensitive)
+    return value.lower() not in ("0", "false", "no", "off", "")
+
+
 class SessionState:
     """Holds mutable session state (auto-approve mode, etc)."""
 
@@ -377,17 +286,22 @@ class SessionState:
         auto_approve: bool = False,
         no_splash: bool = False,
         model: str | None = None,
-        show_quick_start: bool = False,
+        show_tokens: bool | None = None,
     ) -> None:
         self.auto_approve = auto_approve
         self.no_splash = no_splash
         self.model = model  # Current model ID or handle
-        self.show_quick_start = show_quick_start  # Force show Quick Start panel
         self.exit_hint_until: float | None = None
         self.exit_hint_handle = None
         self.thread_id = str(uuid.uuid4())
         self._last_escape_time: float = 0
         self._model_changed: bool = False  # Flag to signal agent recreation needed
+
+        # Token display: CLI arg takes precedence, then env var, then default True
+        if show_tokens is not None:
+            self.show_tokens = show_tokens
+        else:
+            self.show_tokens = _parse_bool_env("KAI_SHOW_TOKENS", default=True)
 
     def toggle_auto_approve(self) -> bool:
         """Toggle auto-approve and return new state."""
