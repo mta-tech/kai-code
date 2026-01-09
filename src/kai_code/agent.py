@@ -316,6 +316,31 @@ class KaiAgent:
         }
         path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
+    def _load_project_context(self) -> str | None:
+        """Load project context from CLAUDE.md or AGENTS.md if present.
+
+        Looks for these files in the project root directory and returns
+        their contents formatted as project context for the system prompt.
+
+        Returns:
+            Formatted project context string, or None if no context file found.
+        """
+        context_files = ["CLAUDE.md", "AGENTS.md"]
+        root = self._config.root_dir
+
+        for filename in context_files:
+            context_path = root / filename
+            if context_path.exists():
+                try:
+                    content = context_path.read_text(encoding="utf-8").strip()
+                    if content:
+                        return f"# Project Context ({filename})\n\n{content}"
+                except Exception:
+                    # If we can't read the file, try the next one
+                    continue
+
+        return None
+
     def _build_graph(self):
         if self._graph is not None:
             return self._graph
@@ -357,9 +382,14 @@ class KaiAgent:
             skills = discover_skills_legacy(self._config.root_dir, self._config.skills_dir)
             skills_prompt = format_skills_for_prompt_legacy(skills, skills_dir=self._config.skills_dir)
 
-        # Build prompt parts: base prompt + user custom + skills + memory
+        # Build prompt parts: base prompt + project context + user custom + skills + memory
         base_prompt = load_prompt(self._get_base_prompt_name())
         prompt_parts = [base_prompt]
+
+        # Load project context from CLAUDE.md or AGENTS.md if present
+        project_context = self._load_project_context()
+        if project_context:
+            prompt_parts.append(project_context)
 
         # Add user's custom system_prompt if provided
         if self._config.system_prompt:
