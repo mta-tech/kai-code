@@ -149,7 +149,7 @@ class DbtAgent(KaiAgent):
         # Discover and format skills if memory manager available
         skills_prompt = None
         if memory_manager:
-            from .skills_parser import discover_skills, format_skills_for_prompt
+            from kai_code.skills_parser import discover_skills, format_skills_for_prompt
             skills_result = discover_skills(self._config.root_dir, self._config.skills_dir)
             memory_manager.update_skills_discovery(skills_result.skills, self._config.skills_dir)
 
@@ -157,7 +157,7 @@ class DbtAgent(KaiAgent):
             skills_prompt = format_skills_for_prompt(skills_result.skills, skills_directory=self._config.skills_dir)
         else:
             # Fallback to old method
-            from .skills import discover_skills_legacy, format_skills_for_prompt_legacy
+            from kai_code.skills import discover_skills_legacy, format_skills_for_prompt_legacy
             skills = discover_skills_legacy(self._config.root_dir, self._config.skills_dir)
             skills_prompt = format_skills_for_prompt_legacy(skills, skills_dir=self._config.skills_dir)
 
