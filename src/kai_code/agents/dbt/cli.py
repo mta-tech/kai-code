@@ -285,7 +285,7 @@ def _create_dbt_agent(
         db_connection: Database connection string.
         profile: dbt profile name.
         target: dbt target.
-        yolo: Auto-approve mode.
+        yolo: Auto-approve mode (DEPRECATED - use session_state.auto_approve instead).
         model: Model name to use (e.g., sonnet-4, gpt-4o).
 
     Returns:
@@ -301,13 +301,14 @@ def _create_dbt_agent(
         default_model = get_default_model()
         model_string = resolve_model(default_model)
 
-    # Create agent
+    # Create agent with HITL enabled (yolo=False)
+    # Auto-approve is controlled at runtime via session_state.auto_approve
     agent = DbtAgent(
         root_dir=project_dir,
         model=model_string,
         db_connection=db_connection,
         dbt_project_dir=project_dir,
-        yolo=yolo,
+        yolo=False,  # Always create with HITL enabled
     )
 
     # Build graph
@@ -428,7 +429,6 @@ async def dbt_cli_loop(
                             new_agent, new_graph = _create_dbt_agent(
                                 project_dir=project_dir,
                                 db_connection=db_conn,
-                                yolo=session_state.auto_approve,
                                 model=selected.id,
                             )
                             # Update references for next iteration
@@ -586,7 +586,6 @@ def main(args: list[str] | None = None) -> int:
             db_connection=config.connection,
             profile=profile,
             target=target,
-            yolo=parsed.auto_approve,
             model=parsed.model,
         )
     except Exception as e:
@@ -615,7 +614,6 @@ def main(args: list[str] | None = None) -> int:
                     db_connection=None,
                     profile=profile,
                     target=target,
-                    yolo=parsed.auto_approve,
                     model=parsed.model,
                 )
             except Exception as e2:
