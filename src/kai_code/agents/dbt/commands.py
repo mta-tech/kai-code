@@ -95,6 +95,9 @@ def parse_dbt_command(command: str) -> tuple[str, dict[str, Any]]:
     if parts[0] == "/model":
         return "model", {}
 
+    if parts[0] == "/brainstorm":
+        return "brainstorm", {}
+
     if parts[0] == "/ralph-patterns":
         return "ralph-patterns", {}
 
@@ -143,6 +146,7 @@ class DbtCommandHandler:
             "compile": self._handle_dbt_compile,
             "list": self._handle_dbt_list,
             "show": self._handle_dbt_show,
+            "brainstorm": self._handle_brainstorm,
             "help": self._handle_help,
             "ralph-pattern": self._handle_ralph_pattern,
             "ralph-patterns": self._handle_list_ralph_patterns,
@@ -311,6 +315,36 @@ dbt Slash Commands:
             )
             return _format_error_for_command(error)
         return self._run_dbt_command(["show", "--select", model], model_name=model)
+
+    def _handle_brainstorm(self, args: dict) -> str:
+        """Handle /brainstorm command.
+
+        This command initiates an interactive design brainstorm session for dbt models,
+        helping users think through data modeling decisions, relationships, and best practices.
+        """
+        return """
+🧠 Design Brainstorm Mode
+
+I'm ready to help you brainstorm and design your dbt data models!
+
+Tell me what you'd like to work on. For example:
+
+• "I need to track customer orders across multiple channels"
+• "How should I model slowly changing dimensions?"
+• "Help me design a staging layer for Stripe data"
+• "What's the best way to handle currency conversions?"
+• "I need to create a customer 360 view"
+
+I'll help you think through:
+  ✓ Entity relationships and foreign keys
+  ✓ Granularity and primary keys
+  ✓ Staging vs intermediate vs marts placement
+  ✓ Naming conventions and dbt best practices
+  ✓ Performance considerations
+  ✓ Testing strategies
+
+What would you like to brainstorm about?
+"""
 
     def _run_dbt_command(
         self,
