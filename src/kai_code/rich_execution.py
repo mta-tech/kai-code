@@ -104,107 +104,33 @@ def prompt_for_tool_approval(
         console.print()
         render_diff_block(preview.diff, preview.diff_title or preview.title)
 
-    options = ["approve", "reject", "auto-accept all going forward"]
-    selected = 0  # Start with approve selected
+    # Use simple input-based approach for better compatibility
+    console.print()
+    console.print("[bold yellow]Choose an action:[/bold yellow]")
+    console.print("  [green][1][/green] Approve")
+    console.print("  [red][2][/red] Reject")
+    console.print("  [blue][3][/blue] Auto-accept all going forward")
+    console.print()
 
-    try:
-        fd = sys.stdin.fileno()
-        old_settings = termios.tcgetattr(fd)
-
+    while True:
         try:
-            tty.setraw(fd)
-            # Hide cursor during menu interaction
-            sys.stdout.write("\033[?25l")
-            sys.stdout.flush()
-
-            # Initial render flag
-            first_render = True
-
-            while True:
-                if not first_render:
-                    # Move cursor back to start of menu (up 3 lines, then to start of line)
-                    sys.stdout.write("\033[3A\r")
-
-                first_render = False
-
-                # Display options vertically with ANSI color codes
-                for i, option in enumerate(options):
-                    sys.stdout.write("\r\033[K")  # Clear line from cursor to end
-
-                    if i == selected:
-                        if option == "approve":
-                            # Green bold with filled checkbox
-                            sys.stdout.write("\033[1;32m[x] Approve\033[0m\n")
-                        elif option == "reject":
-                            # Red bold with filled checkbox
-                            sys.stdout.write("\033[1;31m[x] Reject\033[0m\n")
-                        else:
-                            # Blue bold with filled checkbox for auto-accept
-                            sys.stdout.write("\033[1;34m[x] Auto-accept all going forward\033[0m\n")
-                    elif option == "approve":
-                        # Dim with empty checkbox
-                        sys.stdout.write("\033[2m[ ] Approve\033[0m\n")
-                    elif option == "reject":
-                        # Dim with empty checkbox
-                        sys.stdout.write("\033[2m[ ] Reject\033[0m\n")
-                    else:
-                        # Dim with empty checkbox
-                        sys.stdout.write("\033[2m[ ] Auto-accept all going forward\033[0m\n")
-
-                sys.stdout.flush()
-
-                # Read key
-                char = sys.stdin.read(1)
-
-                if char == "\x1b":  # ESC sequence (arrow keys)
-                    next1 = sys.stdin.read(1)
-                    next2 = sys.stdin.read(1)
-                    if next1 == "[":
-                        if next2 == "B":  # Down arrow
-                            selected = (selected + 1) % len(options)
-                        elif next2 == "A":  # Up arrow
-                            selected = (selected - 1) % len(options)
-                elif char in {"\r", "\n"}:  # Enter
-                    sys.stdout.write("\r\n")  # Move to start of line and add newline
-                    break
-                elif char == "\x03":  # Ctrl+C
-                    sys.stdout.write("\r\n")  # Move to start of line and add newline
-                    raise KeyboardInterrupt
-                elif char.lower() == "a":
-                    selected = 0
-                    sys.stdout.write("\r\n")  # Move to start of line and add newline
-                    break
-                elif char.lower() == "r":
-                    selected = 1
-                    sys.stdout.write("\r\n")  # Move to start of line and add newline
-                    break
-
-        finally:
-            # Show cursor again
-            sys.stdout.write("\033[?25h")
-            sys.stdout.flush()
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-
-    except (termios.error, AttributeError):
-        # Fallback for non-Unix systems
-        console.print("  [ ] (A)pprove  (default)")
-        console.print("  [ ] (R)eject")
-        console.print("  [ ] (Auto)-accept all going forward")
-        choice = input("\nChoice (A/R/Auto, default=Approve): ").strip().lower()
-        if choice in {"r", "reject"}:
-            selected = 1
-        elif choice in {"auto", "auto-accept"}:
-            selected = 2
-        else:
-            selected = 0
-
-    # Return decision based on selection
-    if selected == 0:
-        return ApproveDecision(type="approve")
-    if selected == 1:
-        return RejectDecision(type="reject", message="User rejected the command")
-    # Return special marker for auto-approve mode
-    return {"type": "auto_approve_all"}
+            choice = input("Enter choice (1/2/3, or A/R/Auto, default=1): ").strip().lower()
+            
+            # Handle various input formats
+            if not choice or choice in {"1", "a", "approve"}:
+                console.print("[green]✓ Approved[/green]")
+                return ApproveDecision(type="approve")
+            elif choice in {"2", "r", "reject"}:
+                console.print("[red]✗ Rejected[/red]")
+                return RejectDecision(type="reject", message="User rejected the command")
+            elif choice in {"3", "auto", "auto-accept", "auto-accept all"}:
+                console.print("[blue]✓ Auto-approve mode enabled[/blue]")
+                return {"type": "auto_approve_all"}
+            else:
+                console.print("[yellow]Invalid choice. Please enter 1, 2, 3, A, R, or Auto.[/yellow]")
+        except (EOFError, KeyboardInterrupt):
+            console.print("\n[yellow]Interrupted[/yellow]")
+            raise KeyboardInterrupt
 
 
 async def execute_task(
@@ -396,8 +322,7 @@ async def execute_task(
                         continue
 
                     if isinstance(message, ToolMessage):
-                        # Tool results are sent to the agent, not displayed to users
-                        # Exception: show shell command errors to help with debugging
+                        # Tool results handling - show important output to users
                         tool_name = getattr(message, "name", "")
                         tool_status = getattr(message, "status", "success")
                         tool_content = format_tool_message_content(message.content)
@@ -407,15 +332,28 @@ async def execute_task(
                         if spinner_active:
                             status.update(f"[bold {COLORS['thinking']}]Agent is thinking...")
 
-                        if tool_name in ("shell", "execute") and tool_status != "success":
+                        # Show shell/execute command results (especially in auto-approve mode)
+                        if tool_name in ("shell", "execute"):
                             flush_text_buffer(final=True)
-                            if tool_content:
-                                if spinner_active:
-                                    status.stop()
-                                    spinner_active = False
+                            if spinner_active:
+                                status.stop()
+                                spinner_active = False
+
+                            # Show command output if it exists and has meaningful content
+                            if tool_content and tool_content.strip():
                                 console.print()
-                                console.print(tool_content, style="red", markup=False)
+                                # Truncate very long output
+                                if len(tool_content) > 2000:
+                                    console.print(
+                                        tool_content[:2000] + "\n... (output truncated)",
+                                        style="dim",
+                                        markup=False,
+                                    )
+                                else:
+                                    console.print(tool_content, style="dim", markup=False)
                                 console.print()
+
+                        # Show errors for any tool
                         elif tool_content and isinstance(tool_content, str):
                             stripped = tool_content.lstrip()
                             if stripped.lower().startswith("error"):
@@ -427,6 +365,7 @@ async def execute_task(
                                 console.print(tool_content, style="red", markup=False)
                                 console.print()
 
+                        # Show file operation records
                         if record:
                             flush_text_buffer(final=True)
                             if spinner_active:
