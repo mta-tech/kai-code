@@ -670,10 +670,12 @@ async def execute_task(
             # Check if we crossed a warning threshold (one-time notification)
             warning_level = token_tracker.should_show_warning()
             if warning_level == "critical":
+                console.print()
                 console.print(
                     f"  [{COLORS['token_critical']}]🚨 Context at 95% - recommend using /clear now[/{COLORS['token_critical']}]"
                 )
             elif warning_level == "warning":
+                console.print()
                 console.print(
                     f"  [{COLORS['token_warning']}]⚠️ Context at 80% - consider using /clear soon[/{COLORS['token_warning']}]"
                 )
@@ -681,6 +683,7 @@ async def execute_task(
             # Show brief token status update if enabled (default: True)
             show_tokens = getattr(session_state, "show_tokens", True)
             if show_tokens:
+                console.print()
                 status_display = token_tracker.format_compact_display()
                 console.print(f"  [dim]📊 {status_display}[/dim]")
 
