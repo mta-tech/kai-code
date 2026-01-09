@@ -104,6 +104,18 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         help="Show version information",
     )
 
+    parser.add_argument(
+        "--update",
+        action="store_true",
+        help="Update kai-code from GitHub",
+    )
+
+    parser.add_argument(
+        "--check-update",
+        action="store_true",
+        help="Check if updates are available without installing",
+    )
+
     # Ralph autonomous loop flags
     parser.add_argument(
         "--ralph",
@@ -507,13 +519,56 @@ def main(args: list[str] | None = None) -> int:
 
     # Handle --version
     if parsed.version:
-        try:
-            from kai_code import __version__
+        from kai_code.update import get_current_version, is_editable_install, get_git_info
 
-            console.print(f"kai-code {__version__}")
-        except ImportError:
-            console.print("kai-code (development)")
+        version = get_current_version()
+        is_editable, source_path = is_editable_install()
+
+        console.print(f"kai-code {version}")
+
+        if is_editable and source_path:
+            git_info = get_git_info(source_path)
+            if git_info:
+                parts = []
+                if "branch" in git_info:
+                    parts.append(git_info["branch"])
+                if "commit" in git_info:
+                    parts.append(git_info["commit"])
+                if parts:
+                    console.print(f"Git: {' @ '.join(parts)}", style="dim")
         return 0
+
+    # Handle --check-update
+    if parsed.check_update:
+        from kai_code.update import check_for_updates, format_update_result
+
+        console.print("Checking for updates...")
+        result = check_for_updates()
+        console.print(format_update_result(result))
+        return 0
+
+    # Handle --update
+    if parsed.update:
+        from kai_code.update import update, format_update_result, is_editable_install
+
+        console.print("Updating kai-code from GitHub...")
+        console.print()
+
+        is_editable, _ = is_editable_install()
+        if is_editable:
+            console.print("[dim]Detected editable install - using git pull[/dim]")
+        else:
+            console.print("[dim]Detected pip install - using pip upgrade[/dim]")
+        console.print()
+
+        result = update()
+        console.print(format_update_result(result))
+
+        if result.updated:
+            console.print()
+            console.print("[green]Restart kai-code to use the new version.[/green]")
+
+        return 0 if result.success else 1
 
     # Handle --help-commands
     if parsed.help_commands:

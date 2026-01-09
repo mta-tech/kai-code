@@ -104,6 +104,14 @@ def handle_command(
         _handle_import_settings(command_input)
         return None
 
+    if command == "/update" or command.startswith("/update "):
+        _handle_update_command(command_input)
+        return None
+
+    if command == "/version":
+        _show_version()
+        return None
+
     # Unknown command - let it pass through as regular input
     console.print(
         f"[yellow]Unknown command: {command_input}[/yellow]",
@@ -625,4 +633,115 @@ def _handle_import_settings(command_input: str) -> None:
         console.print(f"[green]✓ {message}[/green]")
     else:
         console.print(f"[red]✗ {message}[/red]")
+    console.print()
+
+
+def _handle_update_command(command_input: str) -> None:
+    """Handle /update command to update kai-code from GitHub.
+
+    Args:
+        command_input: The full command string
+    """
+    from kai_code.update import (
+        update,
+        check_for_updates,
+        format_update_result,
+        is_editable_install,
+        get_git_info,
+    )
+
+    parts = command_input.strip().split()
+    subcommand = parts[1].lower() if len(parts) > 1 else None
+
+    console.print()
+
+    # Check subcommand
+    if subcommand == "check":
+        # Just check for updates without applying
+        console.print("[bold]Checking for updates...[/bold]")
+        console.print()
+        result = check_for_updates()
+        console.print(format_update_result(result))
+        console.print()
+        return
+
+    if subcommand == "status":
+        # Show installation status
+        is_editable, source_path = is_editable_install()
+        from kai_code.update import get_current_version
+        version = get_current_version()
+
+        console.print("[bold]kai-code Installation Status[/bold]")
+        console.print()
+        console.print(f"Version: [cyan]{version}[/cyan]")
+        console.print(f"Install type: [cyan]{'Editable (dev)' if is_editable else 'Regular pip'}[/cyan]")
+
+        if is_editable and source_path:
+            console.print(f"Source path: [dim]{source_path}[/dim]")
+            git_info = get_git_info(source_path)
+            if git_info:
+                if "branch" in git_info:
+                    console.print(f"Git branch: [cyan]{git_info['branch']}[/cyan]")
+                if "commit" in git_info:
+                    console.print(f"Git commit: [cyan]{git_info['commit']}[/cyan]")
+
+        console.print()
+        return
+
+    if subcommand == "help":
+        console.print("[bold]kai-code Update Commands[/bold]")
+        console.print()
+        console.print("  /update         - Update kai-code from GitHub")
+        console.print("  /update check   - Check if updates are available")
+        console.print("  /update status  - Show installation status")
+        console.print("  /update help    - Show this help")
+        console.print()
+        return
+
+    # Default: perform update
+    console.print("[bold]Updating kai-code from GitHub...[/bold]")
+    console.print()
+
+    # Show current status
+    is_editable, source_path = is_editable_install()
+    if is_editable:
+        console.print("[dim]Detected editable install - using git pull[/dim]")
+    else:
+        console.print("[dim]Detected pip install - using pip upgrade[/dim]")
+    console.print()
+
+    # Perform update
+    result = update()
+    console.print(format_update_result(result))
+    console.print()
+
+    if result.updated:
+        console.print("[green]Restart kai-code to use the new version.[/green]")
+        console.print()
+
+
+def _show_version() -> None:
+    """Display kai-code version information."""
+    from kai_code.update import get_current_version, is_editable_install, get_git_info
+
+    version = get_current_version()
+    is_editable, source_path = is_editable_install()
+
+    console.print()
+    console.print("[bold]kai-code[/bold]")
+    console.print(f"Version: [cyan]{version}[/cyan]")
+
+    if is_editable and source_path:
+        git_info = get_git_info(source_path)
+        if git_info:
+            parts = []
+            if "branch" in git_info:
+                parts.append(git_info["branch"])
+            if "commit" in git_info:
+                parts.append(git_info["commit"])
+            if parts:
+                console.print(f"Git: [dim]{' @ '.join(parts)}[/dim]")
+
+    console.print()
+    console.print("[dim]Use /update to update from GitHub[/dim]")
     console.print()
