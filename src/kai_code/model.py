@@ -189,6 +189,51 @@ def _fetch_google_models() -> list[ModelInfo]:
         return []
 
 
+def _fetch_openrouter_models() -> list[ModelInfo]:
+    """Fetch available models from OpenRouter API."""
+    api_key = os.environ.get("OPENROUTER_API_KEY")
+    if not api_key:
+        return []
+
+    try:
+        import httpx
+        response = httpx.get(
+            "https://openrouter.ai/api/v1/models",
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=10.0,
+        )
+        if response.status_code != 200:
+            return []
+
+        data = response.json()
+        models_list = []
+
+        for model in data.get("data", []):
+            model_id = model.get("id", "")
+            if not model_id:
+                continue
+
+            # Get context length if available
+            context_length = model.get("context_length")
+
+            # Create friendly ID (e.g., "anthropic/claude-3.5-sonnet" -> "or-claude-3.5-sonnet")
+            friendly_id = model_id
+            if "/" in friendly_id:
+                # Extract just the model name after the provider prefix
+                friendly_id = "or-" + friendly_id.split("/")[-1]
+
+            models_list.append(ModelInfo(
+                id=friendly_id,
+                handle=f"openrouter:{model_id}",
+                provider="openrouter",
+                context_window=context_length if isinstance(context_length, int) else None,
+            ))
+
+        return models_list
+    except Exception:
+        return []
+
+
 # Cache for dynamic models
 _MODELS_CACHE: list[ModelInfo] | None = None
 _MODELS_CACHE_TIME: float = 0
@@ -212,6 +257,7 @@ def _refresh_models_cache() -> None:
     all_models.extend(_fetch_anthropic_models())
     all_models.extend(_fetch_openai_models())
     all_models.extend(_fetch_google_models())
+    all_models.extend(_fetch_openrouter_models())
 
     if all_models:
         # Set default if not set

@@ -28,6 +28,7 @@ dependencies = [
 openai = ["langchain-openai>=0.2.0"]
 anthropic = ["langchain-anthropic>=0.2.0"]
 google-genai = ["langchain-google-genai>=2.0.0"]
+openrouter = ["langchain-openai>=0.2.0"]
 letta = ["letta-client>=1.0.0"]
 dbt = ["duckdb>=1.0.0", "psycopg[binary]>=3.0.0"]
 dbt-duckdb = ["duckdb>=1.0.0"]

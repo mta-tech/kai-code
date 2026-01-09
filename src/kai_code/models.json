@@ -54,5 +54,50 @@
     "id": "gemini-2.5-flash",
     "handle": "google_genai:gemini-2.5-flash-preview-05-20",
     "context_window": 1048576
+  },
+  {
+    "id": "or-claude-3.5-sonnet",
+    "handle": "openrouter:anthropic/claude-3.5-sonnet",
+    "context_window": 200000
+  },
+  {
+    "id": "or-claude-3.5-haiku",
+    "handle": "openrouter:anthropic/claude-3.5-haiku",
+    "context_window": 200000
+  },
+  {
+    "id": "or-gpt-4o",
+    "handle": "openrouter:openai/gpt-4o",
+    "context_window": 128000
+  },
+  {
+    "id": "or-gpt-4o-mini",
+    "handle": "openrouter:openai/gpt-4o-mini",
+    "context_window": 128000
+  },
+  {
+    "id": "or-deepseek-chat",
+    "handle": "openrouter:deepseek/deepseek-chat",
+    "context_window": 128000
+  },
+  {
+    "id": "or-deepseek-coder",
+    "handle": "openrouter:deepseek/deepseek-coder",
+    "context_window": 128000
+  },
+  {
+    "id": "or-llama-3.3-70b",
+    "handle": "openrouter:meta-llama/llama-3.3-70b-instruct",
+    "context_window": 131072
+  },
+  {
+    "id": "or-qwen-2.5-72b",
+    "handle": "openrouter:qwen/qwen-2.5-72b-instruct",
+    "context_window": 131072
+  },
+  {
+    "id": "or-mistral-large",
+    "handle": "openrouter:mistralai/mistral-large",
+    "context_window": 128000
   }
 ]

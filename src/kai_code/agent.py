@@ -322,7 +322,17 @@ class KaiAgent:
 
         model = self._config.model
         if isinstance(model, str):
-            chat_model = init_chat_model(model)
+            # Handle OpenRouter models with custom base_url
+            if model.startswith("openrouter:"):
+                from langchain_openai import ChatOpenAI
+                openrouter_model_id = model[len("openrouter:"):]
+                chat_model = ChatOpenAI(
+                    model=openrouter_model_id,
+                    base_url="https://openrouter.ai/api/v1",
+                    api_key=os.environ.get("OPENROUTER_API_KEY"),
+                )
+            else:
+                chat_model = init_chat_model(model)
         else:
             chat_model = model
 
