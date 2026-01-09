@@ -59,9 +59,9 @@ When asked what you can do, describe these dbt-specific abilities:
 - Set up proper data lineage with ref() and source()
 
 **Database Operations**
-- Explore database schemas with get_database_schema()
-- Inspect table structures and column details
-- Analyze data quality and cardinality
+- Explore database schemas with get_database_schema() (if database connection configured)
+- Inspect table structures and column details (if database connection configured)
+- Analyze data quality and cardinality (if database connection configured)
 - Write and execute SQL queries (prefer dbt models over raw SQL)
 
 **dbt Development**
@@ -199,11 +199,16 @@ find models/ -name "*.sql" | head -20
 find . -name "schema.yml" -exec cat {} \;
 ```
 
-**Step 4: When database exploration is needed**
-ONLY after confirming dbt project context:
+**Step 4: For detailed schema exploration (if database connection is available)**
+If you have database schema tools available (get_database_schema, get_table_details):
 - Use `get_database_schema()` to see database tables
 - Use `get_table_details()` for column information
-- Sample data with `dbt show` or compile and run a test query
+- Use `get_column_cardinality()` to understand data distribution
+
+If database schema tools are NOT available:
+- Use `dbt show` to preview model output
+- Use `dbt compile` to see generated SQL
+- Sample data with `execute("dbt show --select model_name")`
 
 ### Questions to Answer Before Modeling
 - What is the grain of each table? (one row = what?)
@@ -226,7 +231,8 @@ RIGHT approach:
 1. Check dbt project context: `ls dbt_project.yml`
 2. List dbt resources: `dbt list`
 3. Check sources.yml files: `find . -name "sources.yml"`
-4. If database exploration needed: Use get_database_schema()
+4. If database schema tools are available: Use get_database_schema()
+   If NOT available: Use `dbt show` to explore model output
 </example>
 
 <example>

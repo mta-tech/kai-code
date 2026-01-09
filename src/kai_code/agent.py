@@ -576,6 +576,11 @@ class KaiAgent:
             *BACKGROUND_TASK_TOOLS,
         ]
 
+        # Allow subclasses to add their specific tools
+        subclass_tools = self._get_subclass_tools()
+        if subclass_tools:
+            tools.extend(subclass_tools)
+
         self._graph = create_deep_agent(
             model=chat_model,
             tools=tools,
@@ -585,6 +590,14 @@ class KaiAgent:
             checkpointer=checkpointer,
         )
         return self._graph
+
+    def _get_subclass_tools(self) -> list:
+        """Hook for subclasses to add their specific tools.
+
+        Returns:
+            List of additional tools, or empty list.
+        """
+        return []
 
     def _update_from_state(self, state: Any) -> None:
         raw_messages = state.get("messages", []) if isinstance(state, dict) else []
