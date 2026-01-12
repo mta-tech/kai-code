@@ -6,7 +6,7 @@ Ported from letta-code memory block system.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
+from typing import Any
 
 
 @dataclass
@@ -14,8 +14,8 @@ class MemoryBlock:
     """Represents a memory block with rich metadata."""
     label: str
     content: str
-    description: Optional[str] = None
-    limit: Optional[int] = None
+    description: str | None = None
+    limit: int | None = None
     is_persistent: bool = True
     is_shared: bool = False
 
@@ -24,8 +24,8 @@ class MemoryBlock:
 class SkillsMemoryBlock(MemoryBlock):
     """Memory block specifically for skills metadata."""
     skills_directory: str = ".skills"
-    skills: List[Dict[str, Any]] = field(default_factory=list)
-    
+    skills: list[dict[str, Any]] = field(default_factory=list)
+
     def __post_init__(self):
         if not hasattr(self, 'label'):
             self.label = "skills"
@@ -33,11 +33,11 @@ class SkillsMemoryBlock(MemoryBlock):
             self.description = "Available skills with metadata for loading"
 
 
-@dataclass  
+@dataclass
 class LoadedSkillsMemoryBlock(MemoryBlock):
     """Memory block for currently loaded skill contents."""
-    loaded_skills: Dict[str, str] = field(default_factory=dict)
-    
+    loaded_skills: dict[str, str] = field(default_factory=dict)
+
     def __post_init__(self):
         if not hasattr(self, 'label'):
             self.label = "loaded_skills"
@@ -93,7 +93,7 @@ class ConversationHistoryEntry:
     timestamp: str
     role: str  # "user" or "assistant"
     summary: str
-    message_id: Optional[str] = None
+    message_id: str | None = None
 
 
 @dataclass
@@ -104,7 +104,7 @@ class ConversationHistoryMemoryBlock(MemoryBlock):
     maximum size for long-term context retention.
     """
     max_entries: int = 50
-    entries: List[ConversationHistoryEntry] = field(default_factory=list)
+    entries: list[ConversationHistoryEntry] = field(default_factory=list)
 
     def __post_init__(self):
         if not hasattr(self, 'label'):

@@ -456,7 +456,6 @@ class KaiAgent:
             Returns:
                 JSON string with search results
             """
-            import json
             result = _web_search(query, max_results=max_results, topic=topic, include_raw_content=include_raw_content)
             return json.dumps(result, indent=2)
 
@@ -471,7 +470,6 @@ class KaiAgent:
             Returns:
                 JSON string with markdown content and metadata
             """
-            import json
             result = _fetch_url(url, timeout=timeout)
             return json.dumps(result, indent=2)
 
@@ -497,7 +495,6 @@ class KaiAgent:
             Returns:
                 JSON string with response data including status, headers, and content
             """
-            import json
             # Parse JSON strings to dicts if provided
             headers_dict = json.loads(headers) if headers else None
             data_dict = json.loads(data) if data else None

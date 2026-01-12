@@ -6,9 +6,9 @@ Ported from letta-code TypeScript implementation with enhancements.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -18,20 +18,20 @@ class SkillMetadata:
     name: str
     description: str
     path: Path
-    category: Optional[str] = None
-    tags: List[str] = None
-    license: Optional[str] = None
-    frontmatter: Dict[str, Any] = None
+    category: str | None = None
+    tags: list[str] = field(default_factory=list)
+    license: str | None = None
+    frontmatter: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class SkillDiscoveryResult:
     """Result of skill discovery operation."""
-    skills: List[SkillMetadata]
-    errors: List[str]
+    skills: list[SkillMetadata]
+    errors: list[str]
 
 
-def parse_frontmatter(content: str) -> tuple[Dict[str, Any], str]:
+def parse_frontmatter(content: str) -> tuple[dict[str, Any], str]:
     """Parse YAML-like frontmatter from markdown content.
     
     Supports simple key: value pairs and arrays similar to letta-code implementation.
@@ -44,12 +44,12 @@ def parse_frontmatter(content: str) -> tuple[Dict[str, Any], str]:
     
     frontmatter_text = match.group(1)
     body = match.group(2).strip()
-    frontmatter: Dict[str, Any] = {}
-    
+    frontmatter: dict[str, Any] = {}
+
     # Parse YAML-like frontmatter
     lines = frontmatter_text.split('\n')
-    current_key: Optional[str] = None
-    current_array: List[str] = []
+    current_key: str | None = None
+    current_array: list[str] = []
     
     for line in lines:
         line = line.strip()
@@ -162,7 +162,7 @@ def parse_skill_metadata(file_path: Path, root_path: Path) -> SkillMetadata:
 
 def discover_skills(
     skills_path: str | Path = ".skills",
-    root_dir: Optional[Path] = None
+    root_dir: Path | None = None
 ) -> SkillDiscoveryResult:
     """Discover skills by recursively searching for SKILL.MD files.
     
@@ -178,9 +178,9 @@ def discover_skills(
         root_dir = skills_path.parent.resolve()
     else:
         root_dir = Path(root_dir).resolve()
-    
-    errors: List[str] = []
-    skills: List[SkillMetadata] = []
+
+    errors: list[str] = []
+    skills: list[SkillMetadata] = []
     
     # Check if skills directory exists
     if not skills_path.exists() or not skills_path.is_dir():
@@ -208,7 +208,7 @@ def discover_skills(
 
 
 def format_skills_for_prompt(
-    skills: List[SkillMetadata],
+    skills: list[SkillMetadata],
     skills_directory: str | Path = ".skills"
 ) -> str:
     """Format discovered skills as a string for skills memory block.
@@ -228,8 +228,8 @@ def format_skills_for_prompt(
     lines = [f"Skills Directory: {skills_directory}\n"]
     
     # Group skills by category if categories exist
-    categorized: Dict[str, List[SkillMetadata]] = {}
-    uncategorized: List[SkillMetadata] = []
+    categorized: dict[str, list[SkillMetadata]] = {}
+    uncategorized: list[SkillMetadata] = []
     
     for skill in skills:
         if skill.category:
@@ -273,16 +273,16 @@ def _format_skill_for_prompt(skill: SkillMetadata) -> str:
     return "\n".join(lines)
 
 
-def validate_skill_metadata(skill: SkillMetadata) -> List[str]:
+def validate_skill_metadata(skill: SkillMetadata) -> list[str]:
     """Validate skill metadata and return list of issues.
-    
+
     Args:
         skill: Skill metadata to validate
-        
+
     Returns:
         List of validation issues (empty if valid)
     """
-    issues: List[str] = []
+    issues: list[str] = []
     
     # Required fields
     if not skill.skill_id.strip():

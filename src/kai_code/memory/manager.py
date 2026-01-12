@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional
 from pathlib import Path
 
 from .blocks import (
@@ -27,13 +26,13 @@ logger = logging.getLogger(__name__)
 class MemoryManager:
     """Manages memory blocks for agent context."""
     
-    def __init__(self, root_dir: Optional[Path] = None):
-        self._blocks: Dict[str, MemoryBlock] = {}
+    def __init__(self, root_dir: Path | None = None):
+        self._blocks: dict[str, MemoryBlock] = {}
         self._root_dir = root_dir or Path.cwd()
-        self._skills_block: Optional[SkillsMemoryBlock] = None
-        self._loaded_skills_block: Optional[LoadedSkillsMemoryBlock] = None
-        self._project_block: Optional[ProjectMemoryBlock] = None
-        self._history_block: Optional[ConversationHistoryMemoryBlock] = None
+        self._skills_block: SkillsMemoryBlock | None = None
+        self._loaded_skills_block: LoadedSkillsMemoryBlock | None = None
+        self._project_block: ProjectMemoryBlock | None = None
+        self._history_block: ConversationHistoryMemoryBlock | None = None
         self._load_default_blocks()
     
     def _load_default_blocks(self):
@@ -78,10 +77,10 @@ class MemoryManager:
         self._blocks[block.label] = block
         logger.debug(f"Added memory block: {block.label}")
     
-    def get_block(self, label: str) -> Optional[MemoryBlock]:
+    def get_block(self, label: str) -> MemoryBlock | None:
         """Get a memory block by label."""
         return self._blocks.get(label)
-    
+
     def remove_block(self, label: str) -> bool:
         """Remove a memory block by label."""
         if label in self._blocks:
@@ -89,20 +88,20 @@ class MemoryManager:
             logger.debug(f"Removed memory block: {label}")
             return True
         return False
-    
-    def list_blocks(self) -> List[MemoryBlock]:
+
+    def list_blocks(self) -> list[MemoryBlock]:
         """List all memory blocks."""
         return list(self._blocks.values())
-    
-    def get_skills_block(self) -> Optional[SkillsMemoryBlock]:
+
+    def get_skills_block(self) -> SkillsMemoryBlock | None:
         """Get skills memory block."""
         return self._skills_block
-    
-    def get_loaded_skills_block(self) -> Optional[LoadedSkillsMemoryBlock]:
+
+    def get_loaded_skills_block(self) -> LoadedSkillsMemoryBlock | None:
         """Get loaded skills memory block."""
         return self._loaded_skills_block
 
-    def get_history_block(self) -> Optional[ConversationHistoryMemoryBlock]:
+    def get_history_block(self) -> ConversationHistoryMemoryBlock | None:
         """Get conversation history memory block."""
         return self._history_block
 
@@ -110,7 +109,7 @@ class MemoryManager:
         self,
         role: str,
         summary: str,
-        message_id: Optional[str] = None
+        message_id: str | None = None
     ) -> None:
         """Add a new entry to the conversation history.
 
@@ -158,13 +157,13 @@ class MemoryManager:
         else:
             logger.error("History block not initialized")
 
-    def get_skill_blocks(self) -> tuple[Optional[SkillsMemoryBlock], Optional[LoadedSkillsMemoryBlock]]:
+    def get_skill_blocks(self) -> tuple[SkillsMemoryBlock | None, LoadedSkillsMemoryBlock | None]:
         """Get skills-related memory blocks."""
         skills_block = self.get_skills_block()
         loaded_block = self.get_loaded_skills_block()
         return skills_block, loaded_block
-    
-    def update_block_content(self, label: str, content: str, description: Optional[str] = None) -> bool:
+
+    def update_block_content(self, label: str, content: str, description: str | None = None) -> bool:
         """Update content of a memory block."""
         if label in self._blocks:
             old_block = self._blocks[label]
@@ -181,7 +180,7 @@ class MemoryManager:
             return True
         return False
     
-    def update_skills_discovery(self, skills: List[SkillMetadata], skills_directory: str = ".skills") -> None:
+    def update_skills_discovery(self, skills: list[SkillMetadata], skills_directory: str = ".skills") -> None:
         """Update skills memory block with discovered skills."""
         from ..skills_parser import format_skills_for_prompt
         
@@ -250,7 +249,7 @@ class MemoryManager:
 
         self.update_block_content("conversation_history", content)
 
-    def list_loaded_skills(self) -> Dict[str, str]:
+    def list_loaded_skills(self) -> dict[str, str]:
         """Get dictionary of currently loaded skills."""
         if self._loaded_skills_block:
             return self._loaded_skills_block.loaded_skills.copy()
@@ -277,24 +276,24 @@ class MemoryManager:
 
 def load_memory_blocks_from_directory(
     blocks_dir: str | Path,
-    root_dir: Optional[Path] = None
-) -> List[MemoryBlock]:
+    root_dir: Path | None = None
+) -> list[MemoryBlock]:
     """Load memory blocks from MDX files in a directory.
-    
+
     Similar to letta-code's loadMemoryBlocksFromMdx function.
     """
     blocks_dir = Path(blocks_dir)
     if not blocks_dir.exists():
         logger.warning(f"Memory blocks directory not found: {blocks_dir}")
         return []
-    
+
     # Look for .mdx and .md files
     block_files = (
         list(blocks_dir.glob("*.mdx")) +
         list(blocks_dir.glob("*.md"))
     )
-    
-    blocks: List[MemoryBlock] = []
+
+    blocks: list[MemoryBlock] = []
     for file_path in block_files:
         try:
             content = file_path.read_text(encoding='utf-8')
