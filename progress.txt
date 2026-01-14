@@ -80,7 +80,24 @@
 - 100% backward compatibility maintained (22 agent_loader tests still pass)
 - Commit: 3a496c9
 
-**Next**: M2-E1-S3: Merge agent definition prompts with existing prompt system
+**M2-E1-S3: Merge agent definition prompts with existing prompt system**
+- Integration already achieved via M2-E1-S1 work
+- Agent definitions in .kai/agents/*.md use extends field to reference base prompts
+- Prompt loader seamlessly handles both prompts/ and .kai/agents/ directories
+- Compiled agents use _get_base_prompt_name() which triggers prompt system loading
+- No code changes needed - existing implementation already provides integration
+- Verification: Agent compilation correctly loads merged prompts via prompt system
+
+**M2-E1-S4: Documentation for agent definition prompts**
+- Created comprehensive guide: docs/agent-prompt-guide.md
+- Covers prompt inheritance from both sources (prompts/ and .kai/agents/)
+- Explains loading flow and agent compilation integration
+- Includes examples, best practices, and migration guide
+- Documents API reference and troubleshooting
+- Commit: [to be added]
+
+**Summary**: Phase 2 complete. All 4 stories implemented. 60 tests passing (38 prompt + 22 agent_loader).
+100% backward compatibility maintained.
 
 **M1-E1-S1: AgentDefinition class**
 - Parse markdown files with YAML frontmatter
