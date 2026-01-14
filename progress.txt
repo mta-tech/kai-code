@@ -207,8 +207,22 @@
 - Manual subagent creation for programmatic use
 - Commit: 4ad6728
 
+**M5-E2-S1: Tool authoring documentation**
+- Created comprehensive guide: docs/tool-authoring.md
+- Covers tool creation with @tool decorator
+- Documents tool factories for configured tools
+- Explains registering tools with agents (Python and markdown)
+- Includes naming conventions and docstring guidelines
+- Error handling patterns with structured responses
+- Tool organization and file structure
+- Tool testing strategies with examples
+- Advanced patterns (async, stateful, file system)
+- Performance optimization (timeouts, caching)
+- Common tool patterns (CLI wrappers, data transformations)
+- Best practices and troubleshooting section
+- Commit: d2862ea
+
 **Remaining**:
-- docs/tool-authoring.md (how to create tools for agents)
 - Example agents (.kai/agents/example-*)
 - Migration guide (Python → markdown)
 
@@ -265,9 +279,9 @@ Python and markdown paths use the same base prompts (kai-seeknal and kai-dbt).
 - Phase 2: Prompt System Enhancement ✅
 - Phase 3: Subagent Support ✅
 - Phase 6: Agent Migration ✅ (completed ahead of schedule)
-- Phase 5: Documentation & Examples 🚧 (in progress - 1/4 stories complete)
+- Phase 5: Documentation & Examples 🚧 (in progress - 2/4 stories complete)
 
-**Remaining**: Phase 4 (CLI Scaffolding), Phase 5 (3 more stories)
+**Remaining**: Phase 4 (CLI Scaffolding), Phase 5 (2 more stories)
 
 **Test Coverage**:
 - 96 tests passing (agent_loader + prompts + subagents + migrations)
