@@ -152,28 +152,29 @@
 
 ## Next Up
 
-### Phase 2: Prompt System Enhancement
+### Phase 3: Subagent Support
 
-**Goal**: Support markdown-based prompts alongside existing .md files.
+**Goal**: Implement deepagents-style subagent delegation.
 
-**Stories**:
-- M2-E1-S1: Extend prompt loader to load from .kai/agents/*.md
-- M2-E1-S2: Support inheritance in agent definitions
-- M2-E1-S3: Merge agent definition prompts with existing prompt system
-- M2-E1-S4: Documentation for agent definition prompts
+**M3-E1-S1: Subagent tool wrapper**
+- Created src/kai_code/subagents.py with create_subagent_tool() function
+- Wraps agent classes as LangChain tools for delegation
+- load_subagents_from_config() for batch loading from configuration
+- 11 tests passing in tests/subagents/test_delegation.py
+- Commit: [to be added]
 
-**Dependencies**: Requires Phase 1 (agent loading)
+**M3-E1-S2: Subagent loading from agent definition**
+- Extended AgentDefinition to parse subagents from YAML frontmatter
+- Updated to_agent_class() to include subagent tools
+- 4 tests passing in tests/agent_loader/test_subagents.py
+- Total: 15 tests for subagent functionality
+- Commit: [to be added]
 
-**Files to modify**:
-- src/kai_code/prompts/__init__.py
-- src/kai_code/agent_definition.py (extend)
-- docs/agent-prompt-guide.md (new)
+**Next**: M3-E1-S3: Documentation for subagent support
 
 ---
 
 ## Remaining Phases
-
-### Phase 3: Subagent Support
 - Subagent tool wrapper (deepagents pattern)
 - Subagent loading from configuration
 - Testing and documentation
