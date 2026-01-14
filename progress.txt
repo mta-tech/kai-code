@@ -187,8 +187,21 @@
 ## Remaining Work
 
 ### Phase 4: CLI Scaffolding
-- kai-code init-agent command (create new agent from template)
-- Template system (Jinja2 for agent scaffolding)
+
+**M4-E1-S1: kai-code init-agent command**
+- Implemented `kai-code init-agent <name>` CLI command
+- Created agent management module: src/kai_code/agent_commands/
+- Templates: base, data-engineer, api-developer, ml-engineer
+- Options: --description, --template, --extends, --tools, --model, --color, --output-dir
+- --list-templates flag shows available templates
+- Validates agent names (kebab-case convention)
+- Creates agents in .kai/agents/ by default
+- 4 built-in templates with domain-specific prompts
+- All 1037 tests passing (100% backward compatibility)
+- Commit: 3829356
+
+**Remaining**:
+- Template system (Jinja2 for agent scaffolding) - optional, built-in templates sufficient
 - kai-code compile-agent command (verify agent definition)
 - kai-code validate-agent command (check for common errors)
 
