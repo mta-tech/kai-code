@@ -311,7 +311,8 @@ class TestAgentInheritance:
 
         metadata = get_prompt_metadata("seeknal")
         # The extends field should be parsed from YAML frontmatter
-        assert metadata["inherits"] == "kai-code"
+        # seeknal.md extends kai-seeknal (which is a specialized prompt)
+        assert metadata["inherits"] == "kai-seeknal"
 
     def test_base_agent_has_no_inheritance(self):
         """Base agent should have no inheritance."""
