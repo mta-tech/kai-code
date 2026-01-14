@@ -209,7 +209,7 @@
 - Added 7 DbtAgent migration tests
 - Verified Python and markdown paths work equivalently
 - All 96 tests passing (89 from before + 7 new)
-- Commit: [to be added]
+- Commit: f134e53
 
 **Summary**: Phase 6 (Migration) complete. Both SeeknalAgent and DbtAgent now support hybrid model.
 Python and markdown paths use the same base prompts (kai-seeknal and kai-dbt).
