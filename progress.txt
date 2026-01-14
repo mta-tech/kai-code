@@ -176,7 +176,7 @@
 - Extended docs/agent-development-guide.md with subagent section
 - Covers YAML configuration, tool wrapping, and manual creation
 - Explains delegation flow and best practices
-- Commit: [to be added]
+- Commit: a563202
 
 **Summary**: Phase 3 (Subagent Support) complete. All 3 stories implemented.
 15 subagent tests passing. 75 total tests across agent_loader, prompts, and subagents.
