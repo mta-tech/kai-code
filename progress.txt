@@ -222,8 +222,18 @@
 - Best practices and troubleshooting section
 - Commit: d2862ea
 
+**M5-E3-S1: Example agents**
+- Created .kai/agents/examples/ directory with templates
+- base-agent.md - Minimal template for custom agents
+- data-engineer.md - Data engineering specialist (ETL, pipelines)
+- api-developer.md - API/backend development specialist
+- ml-engineer.md - Machine learning engineer (models, pipelines)
+- README.md - Guide for using and customizing examples
+- Each example demonstrates YAML config, instructions, code patterns
+- Ready-to-use with copy-and-customize workflow
+- Commit: 6589b24
+
 **Remaining**:
-- Example agents (.kai/agents/example-*)
 - Migration guide (Python → markdown)
 
 ### Phase 6: Migration of Existing Agents
@@ -279,9 +289,9 @@ Python and markdown paths use the same base prompts (kai-seeknal and kai-dbt).
 - Phase 2: Prompt System Enhancement ✅
 - Phase 3: Subagent Support ✅
 - Phase 6: Agent Migration ✅ (completed ahead of schedule)
-- Phase 5: Documentation & Examples 🚧 (in progress - 2/4 stories complete)
+- Phase 5: Documentation & Examples 🚧 (in progress - 3/4 stories complete)
 
-**Remaining**: Phase 4 (CLI Scaffolding), Phase 5 (2 more stories)
+**Remaining**: Phase 4 (CLI Scaffolding), Phase 5 (1 more story - migration guide)
 
 **Test Coverage**:
 - 96 tests passing (agent_loader + prompts + subagents + migrations)
