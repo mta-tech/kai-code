@@ -384,4 +384,13 @@ The agent layer design from docs/plans/2025-01-14-agent-layer-design.md has been
 - Migration path between approaches
 - Best practices for both methods
 - All 1037 tests passing
+- Commit: 7dd4320
+
+**Test Agent: Code Reviewer**
+- Created practical example agent: .kai/agents/code-reviewer.md
+- Demonstrates YAML/Markdown approach from documentation
+- Code review specialist with comprehensive review methodology
+- Validates successfully with CLI tools
+- Compiles to Python class correctly
+- All 1037 tests passing
 - Commit: [to be added]
