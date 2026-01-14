@@ -26,8 +26,10 @@ htmlcov/
 *.swp
 *.swo
 
-# Kai Code session data
-.kai/
+# Kai Code session data (but keep agent definitions)
+.kai/*
+!.kai/agents/
+!.kai/agents/*.md
 
 # Build artifacts
 dist/
@@ -60,3 +62,4 @@ logs/
 .auto-claude/
 .auto-claude-status
 .claude_settings.json
+.auto-drive/
