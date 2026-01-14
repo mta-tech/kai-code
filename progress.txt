@@ -161,16 +161,26 @@
 - Wraps agent classes as LangChain tools for delegation
 - load_subagents_from_config() for batch loading from configuration
 - 11 tests passing in tests/subagents/test_delegation.py
-- Commit: [to be added]
+- Commit: 59cbfe3
 
 **M3-E1-S2: Subagent loading from agent definition**
 - Extended AgentDefinition to parse subagents from YAML frontmatter
 - Updated to_agent_class() to include subagent tools
 - 4 tests passing in tests/agent_loader/test_subagents.py
 - Total: 15 tests for subagent functionality
-- Commit: [to be added]
+- Commit: 59cbfe3
 
 **Next**: M3-E1-S3: Documentation for subagent support
+
+**M3-E1-S3: Documentation for subagent support**
+- Extended docs/agent-development-guide.md with subagent section
+- Covers YAML configuration, tool wrapping, and manual creation
+- Explains delegation flow and best practices
+- Commit: [to be added]
+
+**Summary**: Phase 3 (Subagent Support) complete. All 3 stories implemented.
+15 subagent tests passing. 75 total tests across agent_loader, prompts, and subagents.
+100% backward compatibility maintained.
 
 ---
 
