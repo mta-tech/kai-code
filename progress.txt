@@ -186,7 +186,7 @@
 
 ## Remaining Work
 
-### Phase 4: CLI Scaffolding
+### Phase 4: CLI Scaffolding ✅ COMPLETE
 
 **M4-E1-S1: kai-code init-agent command**
 - Implemented `kai-code init-agent <name>` CLI command
@@ -200,10 +200,24 @@
 - All 1037 tests passing (100% backward compatibility)
 - Commit: 3829356
 
-**Remaining**:
-- Template system (Jinja2 for agent scaffolding) - optional, built-in templates sufficient
-- kai-code compile-agent command (verify agent definition)
-- kai-code validate-agent command (check for common errors)
+**M4-E3-S1: kai-code compile-agent command**
+- Implemented `kai-code compile-agent <file>` CLI command
+- Shows agent information with --info flag
+- Shows Python class code by default
+- --validate-only flag for validation without output
+- Displays name, description, extends, tools, prompt length
+- Commit: 82a4a1f
+
+**M4-E4-S1: kai-code validate-agent command**
+- Implemented `kai-code validate-agent <file>` CLI command
+- Validates agent definition for common errors
+- -v/--verbose shows detailed agent summary
+- Checks: file existence, format, name (kebab-case), description
+- Validates model values, tool patterns, parent prompt exists
+- Commit: 82a4a1f
+
+**Summary**: Phase 4 (CLI Scaffolding) complete. All CLI commands implemented and tested.
+Template system (Jinja2) deferred as built-in templates are sufficient for current needs.
 
 ### Phase 5: Documentation & Examples
 
