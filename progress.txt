@@ -233,8 +233,24 @@
 - Ready-to-use with copy-and-customize workflow
 - Commit: 6589b24
 
-**Remaining**:
-- Migration guide (Python → markdown)
+**M5-E4-S1: Migration guide**
+- Created comprehensive guide: docs/migration-guide.md
+- Covers when to migrate and decision criteria
+- Step-by-step migration process with code examples
+- Mapping Python attributes to YAML fields
+- Handling tool factories with parameters (env vars, wrapper modules)
+- Testing equivalence between Python and markdown paths
+- Complete migration example (before/after)
+- Complex cases (dynamic tools, runtime state, custom methods)
+- Hybrid approach (maintaining both Python and markdown)
+- Verification checklist and rollback planning
+- Common issues and fixes
+- Best practices and decision tree
+- Real examples from SeeknalAgent and DbtAgent
+- Emphasizes optional migration - Python continues to work
+- Commit: 98072b0
+
+**Summary**: Phase 5 (Documentation & Examples) complete.
 
 ### Phase 6: Migration of Existing Agents
 - ~~Migrate SeeknalAgent to hybrid model~~ COMPLETE (commit ccfa7e4)
@@ -284,14 +300,14 @@ Python and markdown paths use the same base prompts (kai-seeknal and kai-dbt).
 - Added 14 migration tests (7 Seeknal + 7 Dbt)
 - Verified Python and markdown paths work equivalently for both agents
 
-**Total Progress**: 4 of 6 phases complete (67%)
+**Total Progress**: 5 of 6 phases complete (83%)
 - Phase 1: Core Agent Loading ✅
 - Phase 2: Prompt System Enhancement ✅
 - Phase 3: Subagent Support ✅
+- Phase 5: Documentation & Examples ✅ COMPLETE
 - Phase 6: Agent Migration ✅ (completed ahead of schedule)
-- Phase 5: Documentation & Examples 🚧 (in progress - 3/4 stories complete)
 
-**Remaining**: Phase 4 (CLI Scaffolding), Phase 5 (1 more story - migration guide)
+**Remaining**: Phase 4 (CLI Scaffolding)
 
 **Test Coverage**:
 - 96 tests passing (agent_loader + prompts + subagents + migrations)
