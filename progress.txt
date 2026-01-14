@@ -367,3 +367,21 @@ The agent layer design from docs/plans/2025-01-14-agent-layer-design.md has been
 - Phase 6: ccfa7e4, f134e53
 
 **Final Commit**: 10c1a78 - Progress update completion
+
+---
+
+## Additional Documentation (Post-Completion)
+
+**Documentation: Agent Creation Examples**
+- Created comprehensive guide: docs/agent-creation-examples.md
+- Side-by-side examples of YAML/Markdown and Python SDK approaches
+- 4 complete examples:
+  1. Simple Data Engineer Agent
+  2. ML Engineer Agent with Inheritance
+  3. Agent with Subagents
+  4. Custom Tools Agent
+- Comparison table showing when to use each approach
+- Migration path between approaches
+- Best practices for both methods
+- All 1037 tests passing
+- Commit: [to be added]
