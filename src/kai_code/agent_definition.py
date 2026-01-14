@@ -25,6 +25,7 @@ class AgentDefinition:
         allowed_tools: Alternative whitelist of tools
         model: Model override or 'inherit'
         extends: Parent agent name for inheritance
+        subagents: List of subagent configurations for delegation
         system_prompt: Full system prompt body
         metadata: Raw YAML frontmatter dict
     """
@@ -36,6 +37,7 @@ class AgentDefinition:
     allowed_tools: list[str] = field(default_factory=list)
     model: str | None = None
     extends: str | None = None
+    subagents: list[dict[str, Any]] = field(default_factory=list)
     system_prompt: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -88,6 +90,13 @@ class AgentDefinition:
 
         self.model = self.metadata.get('model')
         self.extends = self.metadata.get('extends')
+
+        # Parse subagents configuration
+        raw_subagents = self.metadata.get('subagents', [])
+        if isinstance(raw_subagents, list):
+            self.subagents = raw_subagents
+        else:
+            self.subagents = []
 
         # Validate agent name is kebab-case
         self._validate_name()
@@ -167,6 +176,16 @@ class AgentDefinition:
                     tool_patterns = self._definition.allowed_tools or self._definition.tools
                     loaded_tools = load_tools_from_patterns(tool_patterns)
                     tools.extend(loaded_tools)
+
+                # Load subagents as tools
+                if self._definition.subagents:
+                    from kai_code.subagents import load_subagents_from_config
+                    subagent_tools = load_subagents_from_config(
+                        subagent_configs=self._definition.subagents,
+                        root_dir=self.config.root_dir,
+                        model=self.config.model,
+                    )
+                    tools.extend(subagent_tools)
 
                 # Get parent tools
                 parent_tools = super()._get_subclass_tools()
