@@ -914,6 +914,145 @@ def _init_agent_main(argv: list[str]) -> int:
         return EXIT_ERROR
 
 
+def _compile_agent_main(argv: list[str]) -> int:
+    """Handle 'kai compile-agent' command.
+
+    Args:
+        argv: Command-line arguments after 'compile-agent'.
+
+    Returns:
+        Exit code (0 for success, 1 for error).
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="kai compile-agent",
+        description="Compile an agent definition and show its structure.",
+    )
+    parser.add_argument(
+        "agent_file",
+        help="Path to agent definition file (.md)",
+    )
+    parser.add_argument(
+        "--info",
+        action="store_true",
+        help="Show agent information instead of Python code",
+    )
+    parser.add_argument(
+        "--validate-only",
+        action="store_true",
+        help="Only validate, don't show compilation output",
+    )
+
+    args = parser.parse_args(argv)
+
+    try:
+        from .agent_commands.compile import validate_agent, compile_agent_to_string, get_agent_info
+
+        # First validate
+        errors = validate_agent(args.agent_file)
+
+        if errors:
+            print(f"Validation errors in {args.agent_file}:", file=sys.stderr)
+            for error in errors:
+                print(f"  ✗ {error}", file=sys.stderr)
+            return EXIT_ERROR
+
+        # Show validation passed
+        if args.validate_only:
+            print(f"✓ {args.agent_file} is valid")
+            return EXIT_SUCCESS
+
+        # Show info or compiled code
+        if args.info:
+            info = get_agent_info(args.agent_file)
+
+            print(f"Agent Information: {info['name']}")
+            print()
+            print(f"  Description: {info['description']}")
+            print(f"  Extends: {info['extends'] or 'None (base agent)'}")
+            print(f"  Model: {info['model']}")
+            print(f"  Tools: {len(info['tools'])} pattern(s)")
+            if info['tool_count'] >= 0:
+                print(f"  Resolved Tool Count: {info['tool_count']}")
+            print(f"  Prompt Length: {info['prompt_lines']} lines")
+            print(f"  Color: {info.get('color', 'None')}")
+            print()
+            print(f"  File: {info['file_path']}")
+            print(f"  Size: {info['file_size']} bytes")
+        else:
+            code = compile_agent_to_string(args.agent_file)
+            print(code)
+
+        return EXIT_SUCCESS
+
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        if os.environ.get("KAI_DEBUG"):
+            traceback.print_exc()
+        return EXIT_ERROR
+
+
+def _validate_agent_main(argv: list[str]) -> int:
+    """Handle 'kai validate-agent' command.
+
+    Args:
+        argv: Command-line arguments after 'validate-agent'.
+
+    Returns:
+        Exit code (0 for success, 1 for error).
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="kai validate-agent",
+        description="Validate an agent definition file for common errors.",
+    )
+    parser.add_argument(
+        "agent_file",
+        help="Path to agent definition file (.md)",
+    )
+    parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Show detailed validation output",
+    )
+
+    args = parser.parse_args(argv)
+
+    try:
+        from .agent_commands.compile import validate_agent
+
+        errors = validate_agent(args.agent_file)
+
+        if errors:
+            print(f"Validation failed for {args.agent_file}:")
+            for error in errors:
+                print(f"  ✗ {error}")
+            return EXIT_ERROR
+        else:
+            print(f"✓ {args.agent_file} is valid")
+
+            if args.verbose:
+                from .agent_commands.compile import get_agent_info
+
+                info = get_agent_info(args.agent_file)
+                print()
+                print("Agent Summary:")
+                print(f"  Name: {info['name']}")
+                print(f"  Tools: {len(info['tools'])} pattern(s), {info['tool_count']} tools resolved")
+                print(f"  Prompt: {info['prompt_lines']} lines")
+                print(f"  Parent: {info['extends'] or 'None (base agent)'}")
+
+            return EXIT_SUCCESS
+
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        if os.environ.get("KAI_DEBUG"):
+            traceback.print_exc()
+        return EXIT_ERROR
+
+
 def main(argv: list[str] | None = None) -> int:
     if argv is None:
         argv = sys.argv[1:]
@@ -923,6 +1062,10 @@ def main(argv: list[str] | None = None) -> int:
         return _resume_main(argv[1:])
     if argv and argv[0] == "init-agent":
         return _init_agent_main(argv[1:])
+    if argv and argv[0] == "compile-agent":
+        return _compile_agent_main(argv[1:])
+    if argv and argv[0] == "validate-agent":
+        return _validate_agent_main(argv[1:])
 
     # Load cwd/.env early so credential checks and default selections work consistently (incl. TUI).
     load_dotenv(root_dir=None)
