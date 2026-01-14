@@ -271,3 +271,52 @@ class TestAgentDirectoryIntegration:
         assert path.exists()
         # Should be in prompts directory, not agents
         assert "prompts/kai-dbt.md" in str(path)
+
+
+class TestAgentInheritance:
+    """Tests for agent definition inheritance via extends field."""
+
+    def setup_method(self):
+        """Clear cache before each test."""
+        clear_cache()
+
+    def test_agent_inherits_base_prompt_content(self):
+        """Agent with extends field should include base prompt content."""
+        kai_code_prompt = load_prompt("kai-code")
+        seeknal_prompt = load_prompt("seeknal")
+
+        # Both should start with the same base content
+        assert kai_code_prompt[:200] == seeknal_prompt[:200]
+
+    def test_agent_has_specialized_content(self):
+        """Agent should have its own specialized content beyond base."""
+        kai_code_prompt = load_prompt("kai-code")
+        seeknal_prompt = load_prompt("seeknal")
+
+        # seeknal should be longer (base + specialized)
+        assert len(seeknal_prompt) > len(kai_code_prompt)
+
+    def test_agent_includes_specialized_sections(self):
+        """Agent should include its specialized sections."""
+        seeknal_prompt = load_prompt("seeknal")
+
+        # Check for seeknal-specific content
+        assert "Data Engineering Specialist" in seeknal_prompt
+        assert "Seeknal" in seeknal_prompt
+        assert "multi-engine data flows" in seeknal_prompt
+
+    def test_agent_extends_field_in_metadata(self):
+        """Agent metadata should include extends field."""
+        from kai_code.prompts import get_prompt_metadata
+
+        metadata = get_prompt_metadata("seeknal")
+        # The extends field should be parsed from YAML frontmatter
+        assert metadata["inherits"] == "kai-code"
+
+    def test_base_agent_has_no_inheritance(self):
+        """Base agent should have no inheritance."""
+        from kai_code.prompts import get_prompt_metadata
+
+        metadata = get_prompt_metadata("kai-code")
+        # kai-code prompt has no extends directive
+        assert metadata["inherits"] is None
