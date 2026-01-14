@@ -1,0 +1,163 @@
+# Kai-Code Agent Layer Implementation Progress
+
+## Completed
+
+### Phase 1: Core Agent Loading (Foundation) ✅
+
+**M1-E1-S1: AgentDefinition class**
+- Parse markdown files with YAML frontmatter
+- Validate kebab-case naming
+- Extract name, description, tools, model, extends fields
+- Location: src/kai_code/agent_definition.py
+- Tests: 5/5 passing in tests/agent_loader/test_agent_definition.py
+- Commit: 219d750
+
+**M1-E1-S2: Tool pattern loading**
+- load_tools_from_patterns() function
+- Support exact module paths (e.g., kai_code.agents.seeknal.tools.project_tools)
+- Support wildcard patterns (e.g., kai_code.agents.seeknal.tools.*)
+- Skip parameterized create_*_tools functions
+- Location: src/kai_code/tool_loader.py
+- Tests: 7/7 passing in tests/agent_loader/test_tool_loader.py
+- Commit: 423c626
+
+**M1-E1-S3: Agent compilation to Python classes**
+- to_agent_class() method on AgentDefinition
+- Create dynamic KaiAgent subclasses from markdown
+- Override _get_base_prompt_name() for custom prompts
+- Override _get_subclass_tools() for tool loading
+- Location: src/kai_code/agent_definition.py (extended)
+- Tests: 3/3 passing in tests/agent_loader/test_compilation.py
+- Commit: 6b207f5
+
+**M1-E1-S4: load_agent() and list_agents() convenience functions**
+- load_agent(name) loads agents from .kai/agents/
+- list_agents() returns all available agent names
+- Helpful error messages with available agents list
+- Location: src/kai_code/agent_loader.py
+- Tests: 4/4 passing in tests/agent_loader/test_loading.py
+- Commit: 6f0ffa8
+
+**M1-E1-S5: Integration tests and example agents**
+- Created .kai/agents/kai-code.md (base general-purpose agent)
+- Created .kai/agents/seeknal.md (data engineering specialist)
+- Integration tests verify markdown vs Python equivalence
+- Tests: 3/3 passing in tests/agent_loader/test_integration.py
+- Commit: e033902
+
+**M1-E1-S6: Documentation**
+- Agent development guide created
+- Location: docs/agent-development-guide.md
+- Covers both Python and markdown approaches
+- Includes API reference and best practices
+
+**Summary**: Phase 1 complete. All 22 new tests passing. 100% backward compatibility maintained (28 existing tests still pass).
+
+---
+
+### Phase 2: Prompt System Enhancement ✅ (IN PROGRESS)
+
+**M2-E1-S1: Extend prompt loader to load from .kai/agents/*.md**
+- Modified get_prompt_path() to check both prompts/ and agents/ directories
+- Modified list_prompts() to return combined list from both directories
+- Extended _parse_inherit_directive() to support YAML frontmatter 'extends' field
+- Extended _remove_directives() to strip YAML frontmatter from agent prompts
+- Added 5 new tests in TestAgentDirectoryIntegration class
+- All 33 tests passing (28 original + 5 new)
+- Commit: 0d61744
+
+**Next**: M2-E1-S2: Support inheritance in agent definitions
+
+**M1-E1-S1: AgentDefinition class**
+- Parse markdown files with YAML frontmatter
+- Validate kebab-case naming
+- Extract name, description, tools, model, extends fields
+- Location: src/kai_code/agent_definition.py
+- Tests: 5/5 passing in tests/agent_loader/test_agent_definition.py
+- Commit: 219d750
+
+**M1-E1-S2: Tool pattern loading**
+- load_tools_from_patterns() function
+- Support exact module paths (e.g., kai_code.agents.seeknal.tools.project_tools)
+- Support wildcard patterns (e.g., kai_code.agents.seeknal.tools.*)
+- Skip parameterized create_*_tools functions
+- Location: src/kai_code/tool_loader.py
+- Tests: 7/7 passing in tests/agent_loader/test_tool_loader.py
+- Commit: 423c626
+
+**M1-E1-S3: Agent compilation to Python classes**
+- to_agent_class() method on AgentDefinition
+- Create dynamic KaiAgent subclasses from markdown
+- Override _get_base_prompt_name() for custom prompts
+- Override _get_subclass_tools() for tool loading
+- Location: src/kai_code/agent_definition.py (extended)
+- Tests: 3/3 passing in tests/agent_loader/test_compilation.py
+- Commit: 6b207f5
+
+**M1-E1-S4: load_agent() and list_agents() convenience functions**
+- load_agent(name) loads agents from .kai/agents/
+- list_agents() returns all available agent names
+- Helpful error messages with available agents list
+- Location: src/kai_code/agent_loader.py
+- Tests: 4/4 passing in tests/agent_loader/test_loading.py
+- Commit: 6f0ffa8
+
+**M1-E1-S5: Integration tests and example agents**
+- Created .kai/agents/kai-code.md (base general-purpose agent)
+- Created .kai/agents/seeknal.md (data engineering specialist)
+- Integration tests verify markdown vs Python equivalence
+- Tests: 3/3 passing in tests/agent_loader/test_integration.py
+- Commit: e033902
+
+**M1-E1-S6: Documentation**
+- Agent development guide created
+- Location: docs/agent-development-guide.md
+- Covers both Python and markdown approaches
+- Includes API reference and best practices
+
+**Summary**: Phase 1 complete. All 22 new tests passing. 100% backward compatibility maintained (28 existing tests still pass).
+
+---
+
+## Next Up
+
+### Phase 2: Prompt System Enhancement
+
+**Goal**: Support markdown-based prompts alongside existing .md files.
+
+**Stories**:
+- M2-E1-S1: Extend prompt loader to load from .kai/agents/*.md
+- M2-E1-S2: Support inheritance in agent definitions
+- M2-E1-S3: Merge agent definition prompts with existing prompt system
+- M2-E1-S4: Documentation for agent definition prompts
+
+**Dependencies**: Requires Phase 1 (agent loading)
+
+**Files to modify**:
+- src/kai_code/prompts/__init__.py
+- src/kai_code/agent_definition.py (extend)
+- docs/agent-prompt-guide.md (new)
+
+---
+
+## Remaining Phases
+
+### Phase 3: Subagent Support
+- Subagent tool wrapper (deepagents pattern)
+- Subagent loading from configuration
+- Testing and documentation
+
+### Phase 4: CLI Scaffolding
+- kai-code init-agent command
+- Template system (Jinja2)
+- kai-code compile-agent and validate-agent
+
+### Phase 5: Documentation & Examples
+- Comprehensive agent development guide
+- Example agents for common use cases
+- Migration guide
+
+### Phase 6: Migration of Existing Agents
+- Migrate SeeknalAgent to hybrid model
+- Migrate DbtAgent to hybrid model
+- Test parity between Python and markdown paths
