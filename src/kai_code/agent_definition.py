@@ -127,3 +127,55 @@ class AgentDefinition:
             errors.append("System prompt body is required")
 
         return errors
+
+    def to_agent_class(self, base_class: type = None) -> type:
+        """Compile this agent definition to a Python class.
+
+        Args:
+            base_class: Base class to inherit from (default: KaiAgent)
+
+        Returns:
+            A dynamically created agent class inheriting from base_class
+
+        Example:
+            >>> definition = AgentDefinition(Path("my-agent.md"))
+            >>> MyAgent = definition.to_agent_class()
+            >>> agent = MyAgent(root_dir=Path.cwd())
+        """
+        from kai_code.agent import KaiAgent
+
+        if base_class is None:
+            base_class = KaiAgent
+
+        # Create a dynamic subclass
+        class DynamicAgent(base_class):
+            # Store the definition for reference
+            _definition = self
+
+            def _get_base_prompt_name(self) -> str:
+                # Use the agent's name as the prompt name
+                # This allows the prompt system to find custom prompts
+                return self._definition.name or self.__class__.__name__
+
+            def _get_subclass_tools(self) -> list:
+                """Load tools from the definition's tool patterns."""
+                from kai_code.tool_loader import load_tools_from_patterns
+                tools = []
+
+                # Load tools from patterns
+                if self._definition.tools or self._definition.allowed_tools:
+                    tool_patterns = self._definition.allowed_tools or self._definition.tools
+                    loaded_tools = load_tools_from_patterns(tool_patterns)
+                    tools.extend(loaded_tools)
+
+                # Get parent tools
+                parent_tools = super()._get_subclass_tools()
+                tools.extend(parent_tools)
+
+                return tools
+
+        # Set the class name
+        DynamicAgent.__name__ = self.name.replace("-", "_").capitalize()
+        DynamicAgent.__qualname__ = DynamicAgent.__name__
+
+        return DynamicAgent
