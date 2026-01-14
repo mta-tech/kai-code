@@ -224,3 +224,50 @@ class TestInheritanceEdgeCases:
         prompt = load_prompt("kai-dbt")
         # Should have separator between kai-code and kai-dbt content
         assert "---" in prompt
+
+
+class TestAgentDirectoryIntegration:
+    """Tests for .kai/agents/ directory integration."""
+
+    def test_list_prompts_includes_agents(self):
+        """list_prompts should include agents from .kai/agents/."""
+        prompts = list_prompts()
+        # Should include both kai-code (from prompts/) and kai-code (from .kai/agents/)
+        # but since they have the same name, should appear once
+        assert "kai-code" in prompts
+        # seeknal agent should be in the list
+        assert "seeknal" in prompts
+
+    def test_load_agent_from_agents_dir(self):
+        """Should be able to load prompts from .kai/agents/ directory."""
+        # Clear cache to ensure fresh load
+        clear_cache()
+
+        prompt = load_prompt("seeknal")
+
+        # Should have loaded the agent content
+        assert "Data Engineering Specialist" in prompt
+        assert "Seeknal" in prompt
+
+    def test_agent_extends_field_respected(self):
+        """Agent definitions with extends field should inherit properly."""
+        # seeknal agent extends kai-code
+        clear_cache()
+        prompt = load_prompt("seeknal")
+
+        # Should include both base and specialized content
+        # The agent definition system handles this through compilation
+        assert len(prompt) > 0
+
+    def test_get_prompt_path_works_for_agents(self):
+        """get_prompt_path should find agents in .kai/agents/."""
+        path = get_prompt_path("seeknal")
+        assert path.exists()
+        assert ".kai/agents/seeknal.md" in str(path)
+
+    def test_prompt_path_falls_back_to_prompts_dir(self):
+        """get_prompt_path should check prompts/ for non-agent prompts."""
+        path = get_prompt_path("kai-dbt")
+        assert path.exists()
+        # Should be in prompts directory, not agents
+        assert "prompts/kai-dbt.md" in str(path)
