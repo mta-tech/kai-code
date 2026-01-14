@@ -193,7 +193,21 @@
 - kai-code validate-agent command (check for common errors)
 
 ### Phase 5: Documentation & Examples
-- docs/subagent-patterns.md (advanced subagent patterns)
+
+**M5-E1-S1: Subagent patterns documentation**
+- Created comprehensive guide: docs/subagent-patterns.md
+- Covers deepagents delegation pattern overview
+- Documents basic usage and advanced patterns:
+  - Hierarchical specialization
+  - Parallel execution
+  - Sequential pipeline
+  - Fallback pattern
+- Includes configuration options, best practices, troubleshooting
+- Real-world examples (e-commerce, multi-region, code review)
+- Manual subagent creation for programmatic use
+- Commit: 4ad6728
+
+**Remaining**:
 - docs/tool-authoring.md (how to create tools for agents)
 - Example agents (.kai/agents/example-*)
 - Migration guide (Python → markdown)
@@ -246,13 +260,14 @@ Python and markdown paths use the same base prompts (kai-seeknal and kai-dbt).
 - Added 14 migration tests (7 Seeknal + 7 Dbt)
 - Verified Python and markdown paths work equivalently for both agents
 
-**Total Progress**: 3 of 6 phases complete (50%)
+**Total Progress**: 4 of 6 phases complete (67%)
 - Phase 1: Core Agent Loading ✅
 - Phase 2: Prompt System Enhancement ✅
 - Phase 3: Subagent Support ✅
 - Phase 6: Agent Migration ✅ (completed ahead of schedule)
+- Phase 5: Documentation & Examples 🚧 (in progress - 1/4 stories complete)
 
-**Remaining**: Phase 4 (CLI Scaffolding), Phase 5 (Documentation)
+**Remaining**: Phase 4 (CLI Scaffolding), Phase 5 (3 more stories)
 
 **Test Coverage**:
 - 96 tests passing (agent_loader + prompts + subagents + migrations)
