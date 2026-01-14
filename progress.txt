@@ -94,7 +94,7 @@
 - Explains loading flow and agent compilation integration
 - Includes examples, best practices, and migration guide
 - Documents API reference and troubleshooting
-- Commit: [to be added]
+- Commit: 9d38cdd
 
 **Summary**: Phase 2 complete. All 4 stories implemented. 60 tests passing (38 prompt + 22 agent_loader).
 100% backward compatibility maintained.
