@@ -199,7 +199,7 @@
 - Migration guide (Python → markdown)
 
 ### Phase 6: Migration of Existing Agents
-- Migrate SeeknalAgent to hybrid model
+- ~~Migrate SeeknalAgent to hybrid model~~ IN PROGRESS
 - Migrate DbtAgent to hybrid model
 - Test parity between Python and markdown paths
 
@@ -228,9 +228,15 @@
 - Compiled agents include subagent tools
 - Subagent documentation in agent-development-guide.md
 
-**Total Progress**: 3 of 6 phases complete (50%)
+**Phase 6: SeeknalAgent Migration** ✅ COMPLETE
+- Updated .kai/agents/seeknal.md to extend kai-seeknal prompt
+- Fixed load_agent() to handle prompt-level inheritance
+- Added 7 Seeknal migration tests
+- Verified Python and markdown paths work equivalently
+
+**Total Progress**: 3.5 of 6 phases complete (58%)
 
 **Test Coverage**:
-- 75 tests passing (agent_loader + prompts + subagents)
+- 89 tests passing (agent_loader + prompts + subagents + seeknal_migration)
 - 100% backward compatibility maintained
 - All new features fully tested

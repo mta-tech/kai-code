@@ -62,15 +62,13 @@ def load_agent(
     # Parse definition
     definition = AgentDefinition(agent_path)
 
-    # Handle inheritance
-    if definition.extends:
-        parent_agent = load_agent(
-            definition.extends,
-            agents_dir=agents_dir,
-            root_dir=root_dir,
-        )
-        # Could merge tools, prompts, etc. here
-        # For now, just use the child's definition
+    # Note: The 'extends' field references a prompt (e.g., 'kai-seeknal'), not another agent definition.
+    # Inheritance is handled at the prompt level by the prompt loader when the agent calls
+    # _get_base_prompt_name(), which returns the agent's name. The prompt loader then:
+    # 1. Finds the agent definition file (e.g., .kai/agents/seeknal.md)
+    # 2. Parses the 'extends' field
+    # 3. Loads the parent prompt and merges with the agent's specialized content
+    # This means agent definitions extend prompts, not other agent definitions.
 
     # Compile to class and instantiate
     agent_class = definition.to_agent_class()
