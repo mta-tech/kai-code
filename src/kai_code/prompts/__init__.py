@@ -13,9 +13,14 @@ Usage:
     dbt_prompt = load_prompt("kai-dbt")
 
 Inheritance:
-    Prompts can inherit from other prompts using the INHERIT directive:
-
+    Prompts can inherit from other prompts using:
+    1. The INHERIT directive (for prompts/ directory):
         # INHERIT: kai-code
+
+    2. The extends field (for .kai/agents/ directory):
+        ---
+        extends: kai-code
+        ---
 
     This will prepend the inherited prompt's content before the current prompt.
 """
@@ -27,11 +32,16 @@ from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import yaml
+
 if TYPE_CHECKING:
     pass
 
 # Directory containing prompt markdown files
 PROMPTS_DIR = Path(__file__).parent
+
+# Directory containing agent definitions
+AGENTS_DIR = Path.cwd() / ".kai" / "agents"
 
 # Regex patterns for parsing directives
 INHERIT_PATTERN = re.compile(r"^#\s*INHERIT:\s*(\S+)\s*$", re.MULTILINE)
@@ -53,13 +63,20 @@ def get_prompt_path(name: str) -> Path:
     Raises:
         FileNotFoundError: If prompt file doesn't exist
     """
+    # First check prompts directory
     prompt_path = PROMPTS_DIR / f"{name}.md"
-    if not prompt_path.exists():
-        available = list_prompts()
-        raise FileNotFoundError(
-            f"Prompt '{name}' not found. Available prompts: {available}"
-        )
-    return prompt_path
+    if prompt_path.exists():
+        return prompt_path
+
+    # Then check agents directory
+    agent_path = AGENTS_DIR / f"{name}.md"
+    if agent_path.exists():
+        return agent_path
+
+    available = list_prompts()
+    raise FileNotFoundError(
+        f"Prompt '{name}' not found. Available prompts: {available}"
+    )
 
 
 def list_prompts() -> list[str]:
@@ -68,15 +85,28 @@ def list_prompts() -> list[str]:
     Returns:
         List of prompt names (without .md extension)
     """
-    return [
-        p.stem
-        for p in PROMPTS_DIR.glob("*.md")
-        if p.is_file() and not p.name.startswith("_")
-    ]
+    prompts = set()
+
+    # Add prompts from prompts directory
+    for p in PROMPTS_DIR.glob("*.md"):
+        if p.is_file() and not p.name.startswith("_"):
+            prompts.add(p.stem)
+
+    # Add agents from agents directory
+    if AGENTS_DIR.exists():
+        for a in AGENTS_DIR.glob("*.md"):
+            if a.is_file() and not a.name.startswith("_"):
+                prompts.add(a.stem)
+
+    return sorted(prompts)
 
 
 def _parse_inherit_directive(content: str) -> str | None:
     """Extract the inherit directive from prompt content.
+
+    Supports both:
+    1. INHERIT directive: # INHERIT: kai-code
+    2. YAML frontmatter: ---\nextends: kai-code\n---
 
     Args:
         content: Raw prompt file content
@@ -84,14 +114,29 @@ def _parse_inherit_directive(content: str) -> str | None:
     Returns:
         Name of prompt to inherit from, or None if no directive
     """
+    # First check for INHERIT directive
     match = INHERIT_PATTERN.search(content)
     if match:
         return match.group(1).strip()
+
+    # Then check for YAML frontmatter with extends field
+    if content.startswith("---"):
+        parts = content.split("---", 2)
+        if len(parts) >= 2:
+            try:
+                frontmatter = yaml.safe_load(parts[1])
+                if frontmatter and isinstance(frontmatter, dict):
+                    extends = frontmatter.get("extends")
+                    if extends:
+                        return str(extends)
+            except (yaml.YAMLError, TypeError):
+                pass
+
     return None
 
 
 def _remove_directives(content: str) -> str:
-    """Remove INHERIT and OVERRIDE directives from content.
+    """Remove INHERIT, OVERRIDE directives and YAML frontmatter from content.
 
     Args:
         content: Raw prompt content with directives
@@ -99,6 +144,16 @@ def _remove_directives(content: str) -> str:
     Returns:
         Content with directives removed
     """
+    # Remove YAML frontmatter if present
+    if content.startswith("---"):
+        parts = content.split("---", 2)
+        if len(parts) >= 3:
+            # Content after second --- is the actual prompt
+            content = parts[2].strip()
+        elif len(parts) == 2:
+            # Only frontmatter and body, use body
+            content = parts[1].strip()
+
     # Remove INHERIT lines
     content = INHERIT_PATTERN.sub("", content)
     # Remove OVERRIDE lines
