@@ -799,11 +799,130 @@ def _stream_json_run(
     return EXIT_INTERRUPT if interrupted else EXIT_SUCCESS
 
 
+def _init_agent_main(argv: list[str]) -> int:
+    """Handle 'kai init-agent' command.
+
+    Args:
+        argv: Command-line arguments after 'init-agent'.
+
+    Returns:
+        Exit code (0 for success, 1 for error).
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="kai init-agent",
+        description="Initialize a new kai-code agent from template.",
+    )
+    parser.add_argument(
+        "name",
+        nargs="?",  # Make name optional for --list-templates
+        help="Agent name (kebab-case, e.g., 'my-agent', 'data-pipeline-v2')",
+    )
+    parser.add_argument(
+        "-d", "--description",
+        help="Agent description (action-oriented, e.g., 'Use proactively for data tasks')",
+    )
+    parser.add_argument(
+        "-t", "--template",
+        choices=["base", "data-engineer", "api-developer", "ml-engineer"],
+        default="base",
+        help="Agent template to use (default: base)",
+    )
+    parser.add_argument(
+        "-e", "--extends",
+        help="Parent agent to inherit from (overrides template)",
+    )
+    parser.add_argument(
+        "--tools",
+        help="Comma-separated list of tool patterns (overrides template)",
+    )
+    parser.add_argument(
+        "-m", "--model",
+        choices=["inherit", "sonnet", "opus", "haiku"],
+        default="inherit",
+        help="Model preference (default: inherit)",
+    )
+    parser.add_argument(
+        "-c", "--color",
+        default="Blue",
+        help="UI color for the agent (default: Blue)",
+    )
+    parser.add_argument(
+        "-o", "--output-dir",
+        default=".kai/agents",
+        help="Output directory for agent file (default: .kai/agents)",
+    )
+    parser.add_argument(
+        "--list-templates",
+        action="store_true",
+        help="List available templates and exit",
+    )
+
+    args = parser.parse_args(argv)
+
+    # Handle --list-templates
+    if args.list_templates:
+        from .agent_commands import list_templates
+
+        print("Available agent templates:")
+        for name, desc in list_templates().items():
+            print(f"  {name:20} - {desc}")
+        return EXIT_SUCCESS
+
+    # Require name if not listing templates
+    if not args.name:
+        parser.error("the following arguments are required: name")
+
+    # Initialize agent
+    try:
+        from .agent_commands import init_agent
+
+        agent_file = init_agent(
+            name=args.name,
+            description=args.description,
+            template=args.template,
+            extends=args.extends,
+            tools=args.tools,
+            model=args.model,
+            color=args.color,
+            output_dir=args.output_dir,
+        )
+
+        print(f"✓ Created agent: {agent_file}")
+        print()
+        print("Next steps:")
+        print(f"  1. Edit the agent: {agent_file}")
+        print(f"  2. Run your agent: kai-code run {args.name} \"your task here\"")
+        print()
+        print("For more information, see:")
+        print("  - Agent Development Guide: docs/agent-development-guide.md")
+        print("  - Example Agents: .kai/agents/examples/")
+
+        return EXIT_SUCCESS
+
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return EXIT_ERROR
+    except FileExistsError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return EXIT_ERROR
+    except Exception as e:
+        print(f"Unexpected error: {e}", file=sys.stderr)
+        if os.environ.get("KAI_DEBUG"):
+            traceback.print_exc()
+        return EXIT_ERROR
+
+
 def main(argv: list[str] | None = None) -> int:
     if argv is None:
         argv = sys.argv[1:]
+
+    # Handle special commands before main argument parsing
     if argv and argv[0] == "resume":
         return _resume_main(argv[1:])
+    if argv and argv[0] == "init-agent":
+        return _init_agent_main(argv[1:])
 
     # Load cwd/.env early so credential checks and default selections work consistently (incl. TUI).
     load_dotenv(root_dir=None)
