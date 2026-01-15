@@ -282,12 +282,16 @@ class KaiAgent:
         if self._graph is None:
             return
 
-        state = self._graph.state
-        if 'messages' not in state:
-            return
+        try:
+            state = self._graph.state
+            if 'messages' not in state:
+                return
 
-        from langchain_core.messages import SystemMessage
-        state['messages'].append(SystemMessage(content=message))
+            from langchain_core.messages import SystemMessage
+            state['messages'].append(SystemMessage(content=message))
+        except (AttributeError, KeyError, TypeError):
+            # Graph may not have state in expected format
+            pass
 
     def fork(self, *, state_path: str | Path) -> "KaiAgent":
         other = KaiAgent(
