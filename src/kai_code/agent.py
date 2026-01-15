@@ -272,6 +272,23 @@ class KaiAgent:
         # Clean up task registry
         get_agent_task_registry().cleanup_agent_tasks(self._agent_id)
 
+    def _add_system_message(self, message: str) -> None:
+        """Add a system message to the conversation.
+
+        This is called by TaskCompletionNotifier when a background task completes.
+        The message is injected into the agent's state and will be visible
+        on the next agent action.
+        """
+        if self._graph is None:
+            return
+
+        state = self._graph.state
+        if 'messages' not in state:
+            return
+
+        from langchain_core.messages import SystemMessage
+        state['messages'].append(SystemMessage(content=message))
+
     def fork(self, *, state_path: str | Path) -> "KaiAgent":
         other = KaiAgent(
             root_dir=self._config.root_dir,
