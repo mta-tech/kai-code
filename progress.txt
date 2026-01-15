@@ -393,4 +393,48 @@ The agent layer design from docs/plans/2025-01-14-agent-layer-design.md has been
 - Validates successfully with CLI tools
 - Compiles to Python class correctly
 - All 1037 tests passing
-- Commit: [to be added]
+- Commit: dd15cd8
+
+---
+
+## External Integration: StockAI
+
+**StockAI Project** (~/project/self/bmad-new/stockai)
+- AI-powered Indonesian stock trading specialist
+- Successfully integrated kai-code as agent layer
+- Demonstrates real-world kai-code usage
+
+**Agents Created** (4 total):
+1. **stockai** - Main trading workflow coordinator
+2. **stockai-analyst** - Deep analysis with 6-gate quality filter (27K chars)
+3. **stockai-trader** - Execution specialist with 2% risk rule (29K chars)
+4. **stockai-risk** - Risk management with portfolio protection (30K chars)
+
+**Tools Created** (15 StockAI tools):
+- Analysis: quality, analyze, risk_position
+- Trading: autopilot, portfolio_buy/sell/view
+- Risk: risk_diversification, risk_portfolio
+- AI Agents: scan, recommend, daily
+- Briefings: morning, evening, weekly
+
+**Integration Features**:
+- Subagent delegation pattern (main → specialists)
+- StockAI tools wrapped for kai-code agents
+- Uses gemini-3-flash-preview model
+- Paper trading for safe learning
+- Real data output verified
+
+**Testing**:
+- Integration tests: 13/13 passing
+- Real query tests: 9/9 passing
+- Interactive demo with live StockAI data
+- All tools invoke StockAI CLI successfully
+
+**StockAI Commits**:
+- c6bdbca - Initial kai-code integration
+- 092c3cf - Tests and demo
+- 28a57e6 - Real query tests and interactive demo
+
+**Documentation**: stockai/docs/kai-code-integration.md
+**Tests**: stockai/tests/integration/test_kai_agents.py, test_real_queries.py
+**Demo**: stockai/examples/interactive_demo.py
