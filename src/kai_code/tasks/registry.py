@@ -48,3 +48,15 @@ class AgentTaskRegistry:
             agent_id = self._task_to_agent.pop(task_id, None)
             if agent_id and agent_id in self._agent_to_tasks:
                 self._agent_to_tasks[agent_id].discard(task_id)
+
+
+# Global singleton instance
+_agent_task_registry: AgentTaskRegistry | None = None
+
+
+def get_agent_task_registry() -> AgentTaskRegistry:
+    """Get the global AgentTaskRegistry instance."""
+    global _agent_task_registry
+    if _agent_task_registry is None:
+        _agent_task_registry = AgentTaskRegistry()
+    return _agent_task_registry
