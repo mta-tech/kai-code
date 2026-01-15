@@ -222,6 +222,11 @@ class KaiAgent:
         self._thread_id: str = uuid.uuid4().hex
         self._agent_id: str = uuid.uuid4().hex[:8]
         self._graph = None
+
+        # Register with active agents
+        from .tasks.active_agents import get_active_agent_registry
+        get_active_agent_registry().register(self._agent_id, self)
+
         self._load_state()
 
     @property
@@ -255,6 +260,17 @@ class KaiAgent:
     def save(self) -> None:
         """Persist current messages/thread_id/config to `state_path`."""
         self._save_state()
+
+    def shutdown(self) -> None:
+        """Clean up agent resources."""
+        from .tasks.active_agents import get_active_agent_registry
+        from .tasks import get_agent_task_registry
+
+        # Unregister from active agents
+        get_active_agent_registry().unregister(self._agent_id)
+
+        # Clean up task registry
+        get_agent_task_registry().cleanup_agent_tasks(self._agent_id)
 
     def fork(self, *, state_path: str | Path) -> "KaiAgent":
         other = KaiAgent(

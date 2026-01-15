@@ -70,6 +70,9 @@ from .tools import (
     _parse_priority,
     BACKGROUND_TASK_TOOLS,
 )
+from .registry import AgentTaskRegistry, get_agent_task_registry
+from .active_agents import ActiveAgentRegistry, get_active_agent_registry
+from .notifier import TaskCompletionNotifier
 
 __all__ = [
     "Task",
@@ -89,4 +92,9 @@ __all__ = [
     "run_background_agent",
     "_parse_priority",
     "BACKGROUND_TASK_TOOLS",
+    "AgentTaskRegistry",
+    "get_agent_task_registry",
+    "ActiveAgentRegistry",
+    "get_active_agent_registry",
+    "TaskCompletionNotifier",
 ]
