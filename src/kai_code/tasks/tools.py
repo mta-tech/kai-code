@@ -93,23 +93,50 @@ def list_background_tasks() -> str:
 
 
 @tool
-def get_task_output(task_id: Annotated[str, "The ID of the task to get output from"]) -> str:
+def get_task_output(
+    task_id: Annotated[str, "The ID of the task to get output from"],
+    wait: Annotated[bool, "If True, wait for task completion before returning (max 60s). If False, return current status immediately."] = False,
+) -> str:
     """Get the full output of a background task.
 
     Use this to see the complete output from a completed, failed, or running task.
     The task_id can be found using list_background_tasks.
 
+    IMPORTANT: If the task is still running, either:
+    - Set wait=True to wait for completion (recommended for most cases)
+    - Call list_background_tasks to check status before calling this again
+    - Do NOT call get_task_output repeatedly in a loop without wait=True
+
     Args:
         task_id: The ID of the task (e.g., "a1b2c3d4")
+        wait: If True, wait up to 60 seconds for task completion (default: False)
 
     Returns:
         The task's output, or an error message if the task was not found.
     """
+    import time
+
     manager = get_task_manager()
     task = manager.get_task(task_id)
 
     if task is None:
         return f"Task not found: {task_id}"
+
+    # If wait=True, poll for completion (max 60 seconds)
+    if wait and task.status == TaskStatus.RUNNING:
+        max_wait = 60
+        start_time = time.time()
+        poll_interval = 1  # Check every second
+
+        while task.status == TaskStatus.RUNNING:
+            if time.time() - start_time >= max_wait:
+                # Timeout waiting for task
+                break
+            time.sleep(poll_interval)
+            # Refresh task from manager
+            task = manager.get_task(task_id)
+            if task is None:
+                return f"Task {task_id} disappeared while waiting"
 
     lines = []
     lines.append(f"Task: {task.description}")
@@ -118,6 +145,26 @@ def get_task_output(task_id: Annotated[str, "The ID of the task to get output fr
 
     if task.duration:
         lines.append(f"Duration: {task.duration:.1f}s")
+
+    if task.status == TaskStatus.RUNNING:
+        lines.append("")
+        lines.append("⚠️  Task is still running.")
+        lines.append("   Call get_task_output with wait=True to wait for completion,")
+        lines.append("   or use list_background_tasks to check all task statuses.")
+        lines.append("")
+        lines.append("Current Output:")
+        lines.append("-" * 40)
+
+        if task.output:
+            # Show partial output for running tasks
+            output = task.output[-5000:]  # Last 5000 chars for running tasks
+            if len(task.output) > 5000:
+                lines.append(f"... ({len(task.output) - 5000} earlier characters omitted)")
+            lines.append(output)
+        else:
+            lines.append("(no output yet)")
+
+        return "\n".join(lines)
 
     if task.error:
         lines.append(f"Error: {task.error}")
