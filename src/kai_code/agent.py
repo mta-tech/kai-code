@@ -591,6 +591,11 @@ class KaiAgent:
                 # Auto-promote to background
                 task_manager = get_task_manager()
                 task_id = task_manager.run_shell(command, working_dir=root_dir)
+
+                # Register this task with current agent
+                from kai_code.tasks import get_agent_task_registry
+                get_agent_task_registry().register_task(self._agent_id, task_id)
+
                 return json.dumps({
                     "moved_to_background": True,
                     "task_id": task_id,
