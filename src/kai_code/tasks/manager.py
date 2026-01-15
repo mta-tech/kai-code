@@ -405,4 +405,16 @@ def get_task_manager() -> TaskManager:
     global _task_manager
     if _task_manager is None:
         _task_manager = TaskManager()
+
+        # Register completion callback for auto-nudge
+        from .notifier import TaskCompletionNotifier
+        from .registry import get_agent_task_registry
+        from .active_agents import get_active_agent_registry
+
+        notifier = TaskCompletionNotifier(
+            get_agent_task_registry(),
+            get_active_agent_registry(),
+        )
+        _task_manager.on_task_complete(notifier)
+
     return _task_manager
