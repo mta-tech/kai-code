@@ -220,6 +220,7 @@ class KaiAgent:
             initialize_skills_system(root, self._config.skills_dir, memory_manager)
         self._messages: list[dict[str, Any]] = []
         self._thread_id: str = uuid.uuid4().hex
+        self._agent_id: str = uuid.uuid4().hex[:8]
         self._graph = None
         self._load_state()
 
