@@ -427,6 +427,7 @@ The agent layer design from docs/plans/2025-01-14-agent-layer-design.md has been
 **Testing**:
 - Integration tests: 13/13 passing
 - Real query tests: 9/9 passing
+- LLM query tests: 5 test scenarios (requires API key)
 - Interactive demo with live StockAI data
 - All tools invoke StockAI CLI successfully
 
@@ -434,7 +435,146 @@ The agent layer design from docs/plans/2025-01-14-agent-layer-design.md has been
 - c6bdbca - Initial kai-code integration
 - 092c3cf - Tests and demo
 - 28a57e6 - Real query tests and interactive demo
+- 9a220e4 - LLM query tests and usage demonstration
 
 **Documentation**: stockai/docs/kai-code-integration.md
-**Tests**: stockai/tests/integration/test_kai_agents.py, test_real_queries.py
-**Demo**: stockai/examples/interactive_demo.py
+**Tests**: stockai/tests/integration/test_kai_agents.py, test_real_queries.py, test_llm_queries.py
+**Demos**: stockai/examples/interactive_demo.py, llm_usage_demo.py
+
+---
+
+## Background Task Auto-Nudge Implementation (2025-01-15)
+
+**Task 1: AgentTaskRegistry** ✅ COMPLETE
+- Registry mapping background tasks to their owning agents
+- Thread-safe with locking
+- Maps task IDs → agent IDs and agent IDs → sets of task IDs
+- Supports task registration, lookup, cleanup, and unregistration
+- Location: src/kai_code/tasks/registry.py
+- Tests: 5/5 passing in tests/tasks/test_agent_task_registry.py
+- Commit: 8c4d101
+
+**Task 2: ActiveAgentRegistry** ✅ COMPLETE
+- Singleton registry of currently running KaiAgent instances
+- Thread-safe agent registration
+- For task completion callbacks to find and notify agents
+- Location: src/kai_code/tasks/active_agents.py
+- Tests: 4/4 passing in tests/tasks/test_active_agents.py
+- Commit: 92cdef0
+
+**Task 3: TaskCompletionNotifier** ✅ COMPLETE
+- Callback that notifies agents when tasks complete
+- Formats task completion as system messages
+- Truncates large output (>10K chars)
+- Handles failed/timeout tasks
+- Skips notification if agent not found
+- Location: src/kai_code/tasks/notifier.py
+- Tests: 5/5 passing in tests/tasks/test_notifier.py
+- Commit: 3d9ac2e
+
+**Task 4: Add agent_id to KaiAgent** ✅ COMPLETE
+- Each agent gets unique 8-character UUID prefix
+- Used for tracking task ownership
+- Location: src/kai_code/agent.py (added line)
+- Tests: 1/1 passing in tests/agents/test_agent_id.py
+- Commit: 4742a69
+
+**Task 5: Register agents with ActiveAgentRegistry** ✅ COMPLETE
+- Agents register on init
+- Agents unregister on shutdown
+- Tasks cleaned up on shutdown
+- Export registries from tasks module
+- Location: src/kai_code/agent.py, src/kai_code/tasks/__init__.py, src/kai_code/tasks/registry.py
+- Tests: 2/2 passing in tests/agents/test_agent_registration.py
+- Commit: 4875a3f
+
+**Task 6: Add _add_system_message method to KaiAgent** ✅ COMPLETE
+- Injects system messages into conversation
+- Used by TaskCompletionNotifier
+- Location: src/kai_code/agent.py (added method)
+- Tests: 1/1 passing in tests/agents/test_agent_message_injection.py
+- Commit: e335452
+
+**Task 7: Register tasks in execute_async_tool** ✅ COMPLETE
+- Tracks which agent owns which tasks
+- Used for routing completion notifications
+- Location: src/kai_code/agent.py (execute_async_tool function)
+- Tests: 1/1 passing in tests/agents/test_execute_async_registration.py
+- Commit: e46d003
+
+**Task 8: Export registries from tasks module** ✅ COMPLETE
+- Export AgentTaskRegistry, get_agent_task_registry
+- Export ActiveAgentRegistry, get_active_agent_registry
+- Export TaskCompletionNotifier
+- Done in Task 5 (commit 4875a3f)
+
+**Task 9: Wire up TaskCompletionNotifier callback** ✅ COMPLETE
+- Connects task completion callbacks to agent notification
+- Injects system messages when tasks complete
+- Location: src/kai_code/tasks/manager.py (get_task_manager function)
+- Tests: 1/1 passing in tests/integration/test_auto_nudge.py
+- Commit: c09a1d1
+
+**Task 10: Integration tests for edge cases** ✅ COMPLETE
+- Failed task notifications
+- Agent shutdown handling
+- Large output truncation
+- Location: tests/integration/test_auto_nudge_edge_cases.py
+- Tests: 3/3 passing
+- Commit: b9053db
+
+**Task 11: Documentation** ✅ COMPLETE
+- Updated design doc with implementation notes
+- Added usage example, file list, test coverage, git commits
+- Commit: 5f49c16
+
+**Task 12: Final verification** ✅ COMPLETE
+- Full test suite run: 140/140 tests passing
+- No regressions in existing tests
+- All new functionality tested
+- Commit: 46b72c8
+
+## Auto-Nudge Implementation Complete ✅
+
+**Status**: ALL TASKS COMPLETE
+**Date**: 2025-01-15
+
+Agents now automatically receive notifications when their background tasks complete, eliminating the need for manual polling and enabling seamless follow-up actions.
+
+### Summary
+
+- **12 tasks** completed
+- **20 new test files** created
+- **140 tests passing** (100%)
+- **10 git commits**
+
+### Key Components Delivered
+
+1. AgentTaskRegistry - Maps tasks to owning agents
+2. ActiveAgentRegistry - Tracks running agents (singleton)
+3. TaskCompletionNotifier - Formats and delivers notifications
+4. KaiAgent enhancements:
+   - Unique agent_id for each agent
+   - Automatic registration with ActiveAgentRegistry
+   - shutdown() method for cleanup
+   - _add_system_message() for message injection
+   - execute_async_tool task registration
+5. Callback wiring in TaskManager
+6. Comprehensive test coverage (unit + integration)
+7. Documentation updates
+
+### Git Commits Summary
+
+- 8c4d101 - feat: add AgentTaskRegistry
+- 92cdef0 - feat: add ActiveAgentRegistry
+- 3d9ac2e - feat: add TaskCompletionNotifier
+- 4742a69 - feat: add unique agent_id to KaiAgent
+- 4875a3f - feat: register agents with ActiveAgentRegistry
+- e335452 - feat: add _add_system_message method to KaiAgent
+- e46d003 - feat: register tasks created by execute_async_tool
+- c09a1d1 - feat: wire up TaskCompletionNotifier for auto-nudge
+- b9053db - test: add integration tests for auto-nudge edge cases
+- 5f49c16 - docs: update auto-nudge design with implementation notes
+- 46b72c8 - fix: handle edge cases in auto-nudge implementation
+
+**Total Progress**: 12 of 12 tasks complete (100%) ✅
