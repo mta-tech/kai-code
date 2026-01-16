@@ -1,6 +1,5 @@
 """Test enhanced UI environment variable toggle."""
 import os
-import pytest
 
 
 def test_enhanced_ui_default():
