@@ -131,13 +131,6 @@ KEYBOARD_SHORTCUTS = {
         "context": ShortcutContext.HAS_INPUT,
         "priority": 4,
     },
-    "shift_enter": {
-        "key": "Shift+Enter",
-        "description": "Insert newline for multi-line input",
-        "display": "newline",
-        "context": ShortcutContext.ALWAYS,
-        "priority": 5,
-    },
     "enter": {
         "key": "Enter",
         "description": "Submit the current input",
@@ -175,10 +168,10 @@ KEYBOARD_SHORTCUTS = {
     },
     "ctrl_j": {
         "key": "Ctrl+J",
-        "description": "Insert newline (alternative to Shift+Enter)",
+        "description": "Insert newline for multi-line input",
         "display": "newline",
         "context": ShortcutContext.MULTI_LINE,
-        "priority": 9,
+        "priority": 5,
     },
 }
 
