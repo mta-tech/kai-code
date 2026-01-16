@@ -617,9 +617,10 @@ async def execute_task(
         # Event loop cancelled the task (e.g. Ctrl+C during streaming) - clean up and return
         if spinner_active:
             status.stop()
-        console.print("\n[yellow]Interrupted by user[/yellow]")
-        console.print("Updating agent state...", style="dim")
-
+        # Use new error formatting
+        from kai_code.rich_helpers import print_error
+        print_error("Operation cancelled", "Try again or use /help for commands")
+        # Update agent state
         try:
             await agent.aupdate_state(
                 config=config,
@@ -629,20 +630,18 @@ async def execute_task(
                     ]
                 },
             )
-            console.print("Ready for next command.\n", style="dim")
-        except Exception as e:
-            console.print(f"[red]Warning: Failed to update agent state: {e}[/red]\n")
-
+        except Exception:
+            pass
         return
 
     except KeyboardInterrupt:
         # User pressed Ctrl+C - clean up and exit gracefully
         if spinner_active:
             status.stop()
-        console.print("\n[yellow]Interrupted by user[/yellow]")
-        console.print("Updating agent state...", style="dim")
-
-        # Inform the agent synchronously (in async context)
+        # Use new error formatting
+        from kai_code.rich_helpers import print_error
+        print_error("Interrupted by user", "Use Ctrl+C twice quickly to exit")
+        # Update agent state
         try:
             await agent.aupdate_state(
                 config=config,
@@ -652,10 +651,8 @@ async def execute_task(
                     ]
                 },
             )
-            console.print("Ready for next command.\n", style="dim")
-        except Exception as e:
-            console.print(f"[red]Warning: Failed to update agent state: {e}[/red]\n")
-
+        except Exception:
+            pass
         return
 
     if spinner_active:
