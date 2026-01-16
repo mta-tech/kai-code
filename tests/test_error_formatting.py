@@ -1,6 +1,6 @@
 """Test error message formatting."""
 import pytest
-from unittest.mock import patch, MagicMock
+
 from kai_code.rich_helpers import print_error
 
 
