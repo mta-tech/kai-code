@@ -448,6 +448,7 @@ class SessionState:
         model: str | None = None,
         show_tokens: bool | None = None,
         show_quick_start: bool = False,
+        enhanced_ui: bool | None = None,
     ) -> None:
         self.auto_approve = auto_approve
         self.no_splash = no_splash
@@ -464,6 +465,12 @@ class SessionState:
             self.show_tokens = show_tokens
         else:
             self.show_tokens = _parse_bool_env("KAI_SHOW_TOKENS", default=True)
+
+        # Enhanced UI features: CLI arg takes precedence, then env var, then default True
+        if enhanced_ui is not None:
+            self.enhanced_ui = enhanced_ui
+        else:
+            self.enhanced_ui = _parse_bool_env("KAI_ENHANCED_UI", default=True)
 
     def toggle_auto_approve(self) -> bool:
         """Toggle auto-approve and return new state."""
