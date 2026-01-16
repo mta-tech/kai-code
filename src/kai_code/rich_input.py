@@ -23,6 +23,7 @@ from prompt_toolkit.document import Document
 from prompt_toolkit.enums import EditingMode
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.styles import Style
 
 from .rich_config import COLORS, COMMANDS, SessionState, ShortcutContext, console
 from .image_utils import ImageData, get_clipboard_image
@@ -35,6 +36,24 @@ AT_MENTION_RE = re.compile(r"@(?P<path>(?:[^\s@]|(?<=\\)\s)*)$")
 SLASH_COMMAND_RE = re.compile(r"^/(?P<command>[a-z]*)$")
 
 EXIT_CONFIRM_WINDOW = 3.0
+
+# Define styles for the toolbar with full-width background colors
+# Includes critical and warning styles for token status indicators
+toolbar_style = Style.from_dict(
+    {
+        "bottom-toolbar": "noreverse",  # Disable default reverse video
+        "toolbar-green": "bg:#10b981 #000000",  # Green for auto-accept ON
+        "toolbar-orange": "bg:#f59e0b #000000",  # Orange for manual accept
+        "toolbar-exit": "bg:#2563eb #ffffff",  # Blue for exit hint
+        "toolbar-task": "bg:#8b5cf6 #ffffff",  # Purple for background tasks
+        "toolbar-model": "bg:#3b82f6 #ffffff",  # Blue for current model
+        "toolbar-critical": "bg:#ef4444 #ffffff",  # Red for critical token usage
+        "toolbar-warning": "bg:#f59e0b #000000",  # Orange for warning token usage
+        "toolbar-hint": "#6b7280",  # Dim gray for hints
+        "toolbar-key": "#94a3b8 bold",  # Brighter gray bold for shortcut keys
+        "toolbar-shortcut": "#64748b",  # Slate gray for shortcut descriptions
+    }
+)
 
 
 @dataclass
@@ -1018,23 +1037,6 @@ def create_prompt_session(
         if AT_MENTION_RE.search(text) or SLASH_COMMAND_RE.match(text):
             # Retrigger completion
             buffer.start_completion(select_first=False)
-
-    from prompt_toolkit.styles import Style
-
-    # Define styles for the toolbar with full-width background colors
-    toolbar_style = Style.from_dict(
-        {
-            "bottom-toolbar": "noreverse",  # Disable default reverse video
-            "toolbar-green": "bg:#10b981 #000000",  # Green for auto-accept ON
-            "toolbar-orange": "bg:#f59e0b #000000",  # Orange for manual accept
-            "toolbar-exit": "bg:#2563eb #ffffff",  # Blue for exit hint
-            "toolbar-task": "bg:#8b5cf6 #ffffff",  # Purple for background tasks
-            "toolbar-model": "bg:#3b82f6 #ffffff",  # Blue for current model
-            "toolbar-hint": "#6b7280",  # Dim gray for hints
-            "toolbar-key": "#94a3b8 bold",  # Brighter gray bold for shortcut keys
-            "toolbar-shortcut": "#64748b",  # Slate gray for shortcut descriptions
-        }
-    )
 
     # Create session reference dict for toolbar to access session
     session_ref = {}
