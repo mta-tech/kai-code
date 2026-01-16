@@ -12,6 +12,7 @@ from kai_code.progress import (
     ProgressCallback,
     ProgressManager,
     ProgressPhase,
+    ProgressBar,
     ToolProgress,
     get_progress_manager,
     reset_progress_manager,
@@ -660,3 +661,103 @@ class TestGetProgressManager:
         # All should be the same instance
         assert len(managers) == 100
         assert all(m is managers[0] for m in managers)
+
+
+class TestProgressBar:
+    """Tests for the ProgressBar class."""
+
+    def test_progress_bar_creation(self) -> None:
+        """Test progress bar can be created."""
+        progress = ProgressBar(total=4)
+        assert progress.total == 4
+        assert progress.current == 0
+
+    def test_progress_bar_update(self) -> None:
+        """Test progress bar updates correctly."""
+        progress = ProgressBar(total=4)
+        progress.update(1)
+        assert progress.current == 1
+
+        formatted = progress.format()
+        assert "25%" in formatted or "1/4" in formatted
+
+    def test_progress_bar_complete(self) -> None:
+        """Test progress bar completion."""
+        progress = ProgressBar(total=4)
+        progress.update(4)
+        assert progress.is_complete()
+
+        formatted = progress.format()
+        assert "100%" in formatted or "4/4" in formatted
+
+    def test_progress_bar_add_step(self) -> None:
+        """Test adding named steps to progress."""
+        progress = ProgressBar(total=3)
+        progress.add_step("Initialize")
+        progress.add_step("Configure")
+        progress.add_step("Execute")
+
+        steps = progress.get_steps()
+        assert len(steps) == 3
+        assert steps[0]["name"] == "Initialize"
+
+    def test_progress_bar_render_with_steps(self) -> None:
+        """Test rendering progress bar with steps."""
+        progress = ProgressBar(total=3)
+        progress.add_step("Initialize", "complete")
+        progress.add_step("Configure", "in_progress")
+        progress.add_step("Execute", "pending")
+
+        rendered = progress.render()
+        assert "Progress:" in rendered
+        assert "✓" in rendered  # complete step
+        assert "⏳" in rendered  # in_progress step
+        assert "Initialize" in rendered
+        assert "Configure" in rendered
+        assert "Execute" in rendered
+
+    def test_progress_bar_render_without_steps(self) -> None:
+        """Test rendering progress bar without steps."""
+        progress = ProgressBar(total=5)
+        progress.update(2)
+
+        rendered = progress.render()
+        assert "Progress: 40% (2/5)" in rendered
+
+    def test_progress_bar_clamping(self) -> None:
+        """Test that progress doesn't exceed total."""
+        progress = ProgressBar(total=3)
+        progress.update(5)  # Try to update more than total
+
+        assert progress.current == 3  # Should be clamped to total
+        assert progress.is_complete()
+
+    def test_progress_bar_zero_total(self) -> None:
+        """Test progress bar with zero total."""
+        progress = ProgressBar(total=0)
+        formatted = progress.format()
+
+        assert formatted == "0% (0/0)"
+
+    def test_progress_bar_multiple_updates(self) -> None:
+        """Test multiple incremental updates."""
+        progress = ProgressBar(total=10)
+
+        for i in range(1, 11):
+            progress.update(1)
+            assert progress.current == i
+
+        assert progress.is_complete()
+        assert progress.format() == "100% (10/10)"
+
+    def test_progress_bar_step_status(self) -> None:
+        """Test adding steps with different statuses."""
+        progress = ProgressBar(total=3)
+        progress.add_step("Step 1", "pending")
+        progress.add_step("Step 2", "in_progress")
+        progress.add_step("Step 3", "complete")
+
+        steps = progress.get_steps()
+        assert steps[0]["status"] == "pending"
+        assert steps[1]["status"] == "in_progress"
+        assert steps[2]["status"] == "complete"
