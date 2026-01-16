@@ -1,13 +1,13 @@
 """Test rich helper functions."""
-import pytest
+
 from kai_code.rich_helpers import (
+    format_progress,
+    print_error,
     print_section_header,
     print_status,
-    print_error,
-    format_progress,
     print_step,
+    print_summary,
 )
-from unittest.mock import patch
 
 
 def test_print_section_header(capsys):
@@ -58,3 +58,41 @@ def test_print_step(capsys):
     assert "1." in captured.out or "1)" in captured.out
     assert "Creating agent" in captured.out
     assert "Agent ID: abc123" in captured.out
+
+
+def test_format_progress_edge_cases():
+    """Test progress formatting with edge cases."""
+    # Negative current value (normalized to 0)
+    assert format_progress(-1, 10) == "0% (0/10)"
+
+    # Zero total
+    assert format_progress(5, 0) == "0% (0/0)"
+
+    # Current > total (should cap at 100%)
+    assert format_progress(15, 10) == "100% (15/10)"
+
+    # Normal case
+    assert format_progress(3, 4) == "75% (3/4)"
+
+
+def test_print_summary(capsys):
+    """Test summary printing with test results."""
+    results = {
+        "test_login": True,
+        "test_logout": True,
+        "test_connection": False,
+    }
+    print_summary(results)
+    captured = capsys.readouterr()
+
+    # Check that all test names appear
+    assert "test_login" in captured.out
+    assert "test_logout" in captured.out
+    assert "test_connection" in captured.out
+
+    # Check for summary section
+    assert "Summary" in captured.out
+
+    # Check for result summary
+    assert "2/3" in captured.out
+

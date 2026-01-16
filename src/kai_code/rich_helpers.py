@@ -4,13 +4,8 @@ Provides standardized formatting for sections, status indicators,
 errors, progress bars, and step-by-step output.
 """
 
-from rich.console import Console
-from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
-from rich.text import Text
-
 # Use global console instance from rich_config
-from kai_code.rich_config import console, COLORS
+from kai_code.rich_config import COLORS, console
 
 
 def print_section_header(title: str) -> None:
@@ -79,16 +74,24 @@ def format_progress(current: int, total: int) -> str:
     """Format progress as string.
 
     Args:
-        current: Current progress value
+        current: Current progress value (negative values treated as 0)
         total: Total value
 
     Returns:
         Formatted progress string (e.g., "75% (3/4)")
+
+    Note:
+        If current is negative, it is treated as 0.
+        If current > total, percentage is capped at 100%.
     """
     if total == 0:
         return "0% (0/0)"
 
-    percentage = int((current / total) * 100)
+    # Handle negative values
+    if current < 0:
+        current = 0
+
+    percentage = min(int((current / total) * 100), 100)
     return f"{percentage}% ({current}/{total})"
 
 
@@ -100,7 +103,8 @@ def print_step(number: int, description: str, result: str | None = None) -> None
         description: Step description
         result: Optional result to display indented
     """
-    console.print(f"[bold {COLORS['primary']}]({number})[/bold {COLORS['primary']}] {description}")
+    style = COLORS["primary"]
+    console.print(f"[bold {style}]({number})[/bold {style}] {description}")
 
     if result:
         console.print(f"    {result}")
@@ -121,11 +125,17 @@ def print_summary(results: dict[str, bool]) -> None:
         status_icon = "✓" if success else "✗"
         status_color = "green" if success else "red"
         status_text = "PASSED" if success else "FAILED"
-        console.print(f"[{status_color}]{status_icon}  {name:30s} {status_text}[/ {status_color}]")
+        console.print(
+            f"[{status_color}]{status_icon}  {name:30s} {status_text}[/ {status_color}]"
+        )
 
     console.print()
     if passed == total:
-        console.print(f"[green]Result: {passed}/{total} tests passed {'✓' * passed}[/green]")
+        checkmarks = "✓" * passed
+        console.print(f"[green]Result: {passed}/{total} tests passed {checkmarks}[/green]")
     else:
-        console.print(f"[yellow]Result: {passed}/{total} tests passed ({total - passed} failed)[/yellow]")
+        console.print(
+            f"[yellow]Result: {passed}/{total} tests passed "
+            f"({total - passed} failed)[/yellow]"
+        )
     console.print()
