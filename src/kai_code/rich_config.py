@@ -16,16 +16,28 @@ dotenv.load_dotenv()
 
 # Color scheme (from deepagents-cli)
 COLORS = {
-    "primary": "#10b981",
-    "dim": "#6b7280",
-    "user": "#ffffff",
-    "agent": "#10b981",
-    "thinking": "#34d399",
-    "tool": "#fbbf24",
-    # Token usage indicator colors
-    "token_normal": "#10b981",  # Green - safe, plenty of context remaining
-    "token_warning": "#fbbf24",  # Yellow - approaching limit (80-95%)
-    "token_critical": "#ef4444",  # Red - near limit (>95%)
+    # User and agent message colors
+    "user": "#00d9ff",  # Cyan for user input
+    "agent": "#a78bfa",  # Purple for agent responses
+
+    # Status colors (semantic)
+    "success": "#10b981",  # Emerald green
+    "warning": "#f59e0b",  # Amber orange
+    "error": "#ef4444",    # Red
+    "info": "#3b82f6",     # Blue
+    "dim": "#6b7280",      # Gray for subtle text
+    "primary": "#8b5cf6",  # Purple accent
+    "accent": "#06b6d4",   # Cyan accent
+
+    # Token status colors
+    "token_warning": "#f59e0b",   # Amber for 80% threshold
+    "token_critical": "#ef4444",  # Red for 95% threshold
+
+    # Component-specific
+    "thinking": "#8b5cf6",  # Purple for "Agent is thinking..."
+    "tool": "#a78bfa",      # Purple for tool calls
+    "file": "#06b6d4",      # Cyan for file paths
+    "code": "#a78bfa",      # Purple for code blocks
 }
 
 # ASCII art banner for Kai Code
