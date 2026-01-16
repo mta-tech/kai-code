@@ -15,7 +15,6 @@ def test_toolbar_has_critical_style():
 
 def test_toolbar_styles_defined():
     """Test all required toolbar styles are defined."""
-    from prompt_toolkit.styles import Style
     from kai_code.rich_input import toolbar_style
 
     # toolbar_style should be defined in the module
