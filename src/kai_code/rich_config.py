@@ -131,9 +131,9 @@ KEYBOARD_SHORTCUTS = {
         "context": ShortcutContext.HAS_INPUT,
         "priority": 4,
     },
-    "alt_enter": {
-        "key": "Alt+Enter",
-        "description": "Insert newline for multi-line input (ESC then Enter, or Option+Enter on Mac)",
+    "shift_enter": {
+        "key": "Shift+Enter",
+        "description": "Insert newline for multi-line input",
         "display": "newline",
         "context": ShortcutContext.ALWAYS,
         "priority": 5,
