@@ -6,8 +6,6 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-import pytest
-
 from kai_code.progress import (
     ProgressCallback,
     ProgressManager,
@@ -296,7 +294,10 @@ class TestProgressCallback:
         """Test that ProgressCallback type works with a lambda."""
         received: list[ToolProgress] = []
 
-        callback: ProgressCallback = lambda p: received.append(p)
+        def _callback(p: ToolProgress) -> None:
+            received.append(p)
+
+        callback: ProgressCallback = _callback
 
         progress = ToolProgress(
             tool_name="lambda_test",
@@ -443,7 +444,9 @@ class TestProgressManagerContextManager:
         manager.report(ToolProgress(tool_name="before", status_message="Before scope"))
 
         with manager.progress_scope(lambda p: inner_received.append(p)):
-            manager.report(ToolProgress(tool_name="inside", status_message="Inside scope"))
+            manager.report(
+                ToolProgress(tool_name="inside", status_message="Inside scope")
+            )
 
         # Report after scope
         manager.report(ToolProgress(tool_name="after", status_message="After scope"))
@@ -468,14 +471,26 @@ class TestProgressManagerContextManager:
             manager.report(ToolProgress(tool_name="outer", status_message="Outer"))
 
             with manager.progress_scope(lambda p: middle_received.append(p)):
-                manager.report(ToolProgress(tool_name="middle", status_message="Middle"))
+                manager.report(
+                    ToolProgress(tool_name="middle", status_message="Middle")
+                )
 
-                with manager.progress_scope(lambda p: inner_received.append(p)):
-                    manager.report(ToolProgress(tool_name="inner", status_message="Inner"))
+                with manager.progress_scope(
+                    lambda p: inner_received.append(p)
+                ):
+                    manager.report(
+                        ToolProgress(tool_name="inner", status_message="Inner")
+                    )
 
-                manager.report(ToolProgress(tool_name="back_middle", status_message="Back to middle"))
+                manager.report(
+                    ToolProgress(
+                        tool_name="back_middle", status_message="Back to middle"
+                    )
+                )
 
-            manager.report(ToolProgress(tool_name="back_outer", status_message="Back to outer"))
+            manager.report(
+                ToolProgress(tool_name="back_outer", status_message="Back to outer")
+            )
 
         assert [p.tool_name for p in outer_received] == ["outer", "back_outer"]
         assert [p.tool_name for p in middle_received] == ["middle", "back_middle"]
@@ -491,7 +506,11 @@ class TestProgressManagerContextManager:
 
         with manager.progress_scope(None):
             # This should not be received
-            manager.report(ToolProgress(tool_name="suppressed", status_message="Suppressed"))
+            manager.report(
+                ToolProgress(
+                    tool_name="suppressed", status_message="Suppressed"
+                )
+            )
 
         manager.report(ToolProgress(tool_name="after", status_message="After"))
 
@@ -509,7 +528,11 @@ class TestProgressManagerContextManager:
 
         try:
             with manager.progress_scope(lambda p: inner_received.append(p)):
-                manager.report(ToolProgress(tool_name="before_error", status_message="Before"))
+                manager.report(
+                    ToolProgress(
+                        tool_name="before_error", status_message="Before"
+                    )
+                )
                 raise RuntimeError("Test exception")
         except RuntimeError:
             pass
@@ -583,7 +606,9 @@ class TestProgressManagerThreadSafety:
 
         def reporter() -> None:
             for i in range(100):
-                progress = ToolProgress(tool_name="reporter", status_message=f"Report {i}")
+                progress = ToolProgress(
+                    tool_name="reporter", status_message=f"Report {i}"
+                )
                 manager.report(progress)
                 time.sleep(0.0001)
 
