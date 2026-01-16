@@ -6,9 +6,6 @@ Adapted from deepagents-cli for kai-code.
 import asyncio
 import json
 import re
-import sys
-import termios
-import tty
 
 from langchain.agents.middleware.human_in_the_loop import (
     ActionRequest,
@@ -26,10 +23,6 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.text import Text
 
-from kai_code.rich_config import COLORS, console
-from kai_code.file_ops import FileOpTracker, build_approval_preview
-from kai_code.image_utils import create_multimodal_content
-from kai_code.rich_input import ImageTracker, parse_file_mentions
 from kai_code.cli_ui import (
     TokenTracker,
     format_tool_display,
@@ -38,6 +31,10 @@ from kai_code.cli_ui import (
     render_file_operation,
     render_todo_list,
 )
+from kai_code.file_ops import FileOpTracker, build_approval_preview
+from kai_code.image_utils import create_multimodal_content
+from kai_code.rich_config import COLORS, console
+from kai_code.rich_input import ImageTracker, parse_file_mentions
 
 _HITL_REQUEST_ADAPTER = TypeAdapter(HITLRequest)
 
@@ -324,7 +321,6 @@ async def execute_task(
                     if isinstance(message, ToolMessage):
                         # Tool results handling - show important output to users
                         tool_name = getattr(message, "name", "")
-                        tool_status = getattr(message, "status", "success")
                         tool_content = format_tool_message_content(message.content)
                         record = file_op_tracker.complete_with_message(message)
 
@@ -686,4 +682,4 @@ async def execute_task(
 
             # Show persistent /clear hint when above 95% (after every response)
             if token_tracker.get_status_level() == "critical":
-                console.print(f"  [dim]💡 Tip: Use /clear to reset context[/dim]")
+                console.print("  [dim]💡 Tip: Use /clear to reset context[/dim]")
