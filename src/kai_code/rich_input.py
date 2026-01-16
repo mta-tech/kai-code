@@ -745,7 +745,7 @@ def get_bottom_toolbar(
             or input_state.has_text
         )
         if wants_multiline_hint:
-            shortcut_parts = format_shortcut_from_registry("alt_enter", include_separator=False)
+            shortcut_parts = format_shortcut_from_registry("shift_enter", include_separator=False)
             if shortcut_parts:
                 segments.append(ToolbarSegment(
                     parts=shortcut_parts,
@@ -958,16 +958,16 @@ def create_prompt_session(
             buffer.validate_and_handle()
             # If empty, do nothing (don't submit)
 
-    # Alt+Enter for newlines (press ESC then Enter, or Option+Enter on Mac)
-    @kb.add("escape", "enter")
+    # Shift+Enter for newlines
+    @kb.add("s-enter")
     def _(event) -> None:
-        """Alt+Enter inserts a newline for multi-line input."""
+        """Shift+Enter inserts a newline for multi-line input."""
         event.current_buffer.insert_text("\n")
 
-    # Ctrl+J for newlines (alternative to Alt+Enter, standard terminal control code)
+    # Ctrl+J for newlines (alternative to Shift+Enter, standard terminal control code)
     @kb.add("c-j")
     def _(event) -> None:
-        """Ctrl+J inserts a newline (alternative to Alt+Enter)."""
+        """Ctrl+J inserts a newline (alternative to Shift+Enter)."""
         event.current_buffer.insert_text("\n")
 
     @kb.add("escape")
