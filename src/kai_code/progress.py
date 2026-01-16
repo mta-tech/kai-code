@@ -315,3 +315,140 @@ def reset_progress_manager() -> None:
     global _progress_manager
     with _manager_lock:
         _progress_manager = None
+
+
+@dataclass
+class ProgressBar:
+    """Simple progress tracker for multi-step operations.
+
+    This provides a basic progress tracking mechanism for operations
+    that can be broken down into discrete steps. It's simpler than
+    the ToolProgress/ProgressManager system and is useful for
+    tracking high-level operation progress.
+
+    Attributes:
+        total: Total number of steps/items to complete
+        current: Current number of steps/items completed
+        steps: Optional list of named steps with their status
+
+    Example:
+        progress = ProgressBar(total=4)
+        progress.add_step("Initialize")
+        progress.add_step("Configure")
+        progress.add_step("Execute")
+        progress.add_step("Finalize")
+
+        progress.update(1)  # Complete first step
+        print(progress.format())  # "25% (1/4)"
+
+        progress.update(1)  # Complete second step
+        print(progress.render())  # Shows progress with step list
+    """
+
+    total: int
+    current: int = 0
+    steps: list[dict[str, str]] = field(default_factory=list)
+
+    def update(self, count: int = 1) -> None:
+        """Update progress by count.
+
+        Args:
+            count: Number of steps completed (default: 1)
+
+        Example:
+            progress = ProgressBar(total=10)
+            progress.update(3)  # Complete 3 steps
+            assert progress.current == 3
+        """
+        self.current = min(self.current + count, self.total)
+
+    def add_step(self, name: str, status: str = "pending") -> None:
+        """Add a named step to track.
+
+        Args:
+            name: Step name
+            status: Step status (pending, in_progress, complete)
+
+        Example:
+            progress = ProgressBar(total=3)
+            progress.add_step("Initialize", "pending")
+            progress.add_step("Process", "in_progress")
+            progress.add_step("Complete", "pending")
+        """
+        self.steps.append({"name": name, "status": status})
+
+    def get_steps(self) -> list[dict[str, str]]:
+        """Get all tracked steps.
+
+        Returns:
+            List of step dictionaries with 'name' and 'status' keys
+
+        Example:
+            progress = ProgressBar(total=2)
+            progress.add_step("Step 1")
+            progress.add_step("Step 2")
+            steps = progress.get_steps()
+            assert len(steps) == 2
+        """
+        return self.steps
+
+    def is_complete(self) -> bool:
+        """Check if progress is complete.
+
+        Returns:
+            True if current >= total, False otherwise
+
+        Example:
+            progress = ProgressBar(total=4)
+            progress.update(4)
+            assert progress.is_complete() is True
+        """
+        return self.current >= self.total
+
+    def format(self) -> str:
+        """Format progress as string.
+
+        Returns:
+            Formatted progress string with percentage and fraction
+
+        Example:
+            progress = ProgressBar(total=4)
+            progress.update(1)
+            assert progress.format() == "25% (1/4)"
+        """
+        if self.total == 0:
+            return "0% (0/0)"
+
+        percentage = int((self.current / self.total) * 100)
+        return f"{percentage}% ({self.current}/{self.total})"
+
+    def render(self) -> str:
+        """Render progress bar as string.
+
+        Returns:
+            Multi-line progress bar display with percentage and optional steps
+
+        Example:
+            progress = ProgressBar(total=3)
+            progress.add_step("Step 1")
+            progress.add_step("Step 2")
+            print(progress.render())
+            # Output:
+            # Progress: 0% (0/3)
+            #     Step 1: Step 1
+            #     Step 2: Step 2
+        """
+        lines = []
+        lines.append(f"Progress: {self.format()}")
+
+        if self.steps:
+            for i, step in enumerate(self.steps):
+                status_icon = {
+                    "complete": "✓",
+                    "in_progress": "⏳",
+                    "pending": " ",
+                }.get(step["status"], " ")
+
+                lines.append(f"  {status_icon} Step {i + 1}: {step['name']}")
+
+        return "\n".join(lines)
