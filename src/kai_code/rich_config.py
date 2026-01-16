@@ -175,7 +175,7 @@ KEYBOARD_SHORTCUTS = {
     },
     "ctrl_j": {
         "key": "Ctrl+J",
-        "description": "Insert newline (alternative to Alt+Enter)",
+        "description": "Insert newline (alternative to Shift+Enter)",
         "display": "newline",
         "context": ShortcutContext.MULTI_LINE,
         "priority": 9,

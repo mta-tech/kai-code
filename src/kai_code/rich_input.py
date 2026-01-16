@@ -232,7 +232,7 @@ class ToolbarSegment:
         parts: List of (style_class, text) tuples for prompt_toolkit.
         priority: Display priority (1=highest, higher numbers=lower priority).
                   Priority 1: Critical state (BASH MODE, exit hint, tasks, auto-approve)
-                  Priority 2: Contextual hints (ESC ESC cancel, Alt+Enter newline)
+                  Priority 2: Contextual hints (ESC ESC cancel, Shift+Enter newline)
                   Priority 3: Rotating general hints (Ctrl+B, Ctrl+E, @ files, / commands)
                   Priority 4: Model display (truncated first when space is limited)
         include_separator: Whether this segment includes a leading separator.
@@ -315,7 +315,7 @@ def truncate_toolbar_segments(
 
     Priority order (lower number = higher priority):
     1. Critical state - BASH MODE, exit hint, tasks, auto-approve (priority 1)
-    2. Contextual hints - ESC ESC cancel, Alt+Enter newline (priority 2)
+    2. Contextual hints - ESC ESC cancel, Shift+Enter newline (priority 2)
     3. Rotating general hints - @ files, / commands, Ctrl+B, Ctrl+E (priority 3)
     4. Model display (priority 4) - shows last, truncated first
 
@@ -639,7 +639,7 @@ def get_bottom_toolbar(
     Smart truncation is applied when content exceeds terminal width.
     Priority order (lower number = higher priority):
     1. Critical state - BASH MODE, exit hint, tasks, auto-approve (priority 1)
-    2. Contextual hints - ESC ESC cancel, Alt+Enter newline (priority 2)
+    2. Contextual hints - ESC ESC cancel, Shift+Enter newline (priority 2)
     3. Rotating general hints - @ files, / commands, Ctrl+B, Ctrl+E (priority 3)
     4. Model display (priority 4) - shows last, truncated first
     """
@@ -735,7 +735,7 @@ def get_bottom_toolbar(
                     include_separator=True,
                 ))
 
-        # Show Alt+Enter newline hint contextually when user might want multi-line input:
+        # Show Shift+Enter newline hint contextually when user might want multi-line input:
         # - When already multi-line (user is writing multiple lines)
         # - When @ file is mentioned (likely writing a longer prompt about the file)
         # - When user has typed text (might want to add additional context on new lines)
