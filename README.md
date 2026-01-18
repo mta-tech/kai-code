@@ -20,7 +20,7 @@
 
 | Agent | CLI Command | Description |
 |-------|-------------|-------------|
-| **KaiAgent** | `kai` | General-purpose coding agent for software engineering |
+| **KaiAgent** | `kai-code` | General-purpose coding agent for software engineering |
 | **DbtAgent** | `kai-dbt` | Specialized data engineering agent for dbt projects |
 
 ## Quick Start
