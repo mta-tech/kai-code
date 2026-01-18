@@ -8,10 +8,12 @@
 ## Features
 
 - **Intelligent Code Agents**: AI-powered assistants that understand your codebase
-- **Multiple LLM Support**: Works with OpenAI, Anthropic Claude, and Google Gemini
+- **Multiple LLM Support**: Works with OpenAI, Anthropic Claude, Google Gemini, and OpenRouter
 - **Permission System**: Fine-grained control over what the agent can do
 - **Human-in-the-Loop**: Approval workflows for sensitive operations
 - **Session Persistence**: Resume conversations across restarts
+- **Token Usage Indicator**: Color-coded warnings when approaching context limits
+- **Auto-Update**: Update kai-code directly from GitHub without reinstallation
 - **Extensible**: Create custom agents with specialized capabilities
 
 ## Agents
@@ -41,6 +43,10 @@ export ANTHROPIC_API_KEY=your-key-here
 pip install -e '.[google-genai]'
 export GOOGLE_API_KEY=your-key-here
 
+# With OpenRouter support
+pip install -e '.[openrouter]'
+export OPENROUTER_API_KEY=your-key-here
+
 # With dbt support (includes DuckDB and PostgreSQL)
 pip install -e '.[dbt]'
 ```
@@ -51,13 +57,13 @@ pip install -e '.[dbt]'
 
 ```bash
 # Start interactive session
-kai
+kai-code
 
 # With auto-approve mode (no confirmations)
-kai -y
+kai-code -y
 
 # Start new session
-kai --new
+kai-code --new
 ```
 
 #### Programmatic Usage
@@ -74,13 +80,13 @@ print(result.output)
 
 ```bash
 # Single prompt
-kai -p "Explain the architecture of this project"
+kai-code -p "Explain the architecture of this project"
 
 # From stdin
-echo "Add unit tests for utils.py" | kai -p
+echo "Add unit tests for utils.py" | kai-code -p
 
 # With JSON output
-kai -p "List all functions" --output-format json
+kai-code -p "List all functions" --output-format json
 ```
 
 ## CLI Reference
@@ -89,7 +95,7 @@ kai -p "List all functions" --output-format json
 
 | Command | Description |
 |---------|-------------|
-| `kai` | Start the general-purpose coding agent |
+| `kai-code` | Start the general-purpose coding agent |
 | `kai-dbt` | Start the dbt-specialized data engineering agent |
 | `kai-basic` | Legacy CLI (basic mode) |
 
@@ -115,11 +121,23 @@ Available in interactive mode:
 | `/exit` or `/quit` | Exit the session |
 | `/new` | Start a new conversation |
 | `/model <name>` | Switch the AI model |
+| `/models [refresh]` | List or refresh available models |
+| `/tokens [show\|hide]` | Show or hide token usage indicator |
 | `/history` | Show conversation history |
+| `/clear` | Clear conversation history |
+| `/skills` | Show available skills |
+| `/tasks` | Show background tasks |
+| `/quickstart` | Show quick start guide |
+| `/version` | Show version information |
 | `/brainstorm [topic]` | Start a design session |
 | `/ralph start` | Start autonomous Ralph mode |
 | `/ralph status` | Check Ralph loop status |
 | `/ralph stop` | Stop Ralph loop |
+| `/update` | Update kai-code from GitHub |
+| `/update check` | Check if updates are available |
+| `/update status` | Show installation status |
+| `/export-settings [file]` | Export settings to a file |
+| `/import-settings <file>` | Import settings from a file |
 
 ### dbt-Specific Commands (kai-dbt)
 
@@ -164,10 +182,10 @@ CLI flags and environment variables take highest precedence.
 
 ```bash
 # Use permission mode
-kai --permission-mode plan
+kai-code --permission-mode plan
 
 # YOLO shortcut
-kai --yolo
+kai-code --yolo
 ```
 
 ## Human-in-the-Loop (HITL)
@@ -185,13 +203,13 @@ result = agent.resume([{"type": "approve"}])
 
 ```bash
 # Run without auto-approve
-kai --no-yolo -p "Run tests"
+kai-code --no-yolo -p "Run tests"
 
 # When interrupted (exit code 2), approve pending action
-kai resume --continue --approve
+kai-code resume --continue --approve
 
 # Or reject
-kai resume --continue --reject
+kai-code resume --continue --reject
 ```
 
 ## Advanced Features
@@ -201,7 +219,7 @@ kai resume --continue --reject
 Start a collaborative design session:
 
 ```bash
-kai
+kai-code
 > /brainstorm user authentication system
 ```
 
@@ -217,7 +235,7 @@ The `/brainstorm` command guides you through:
 Ralph Wiggum mode enables autonomous, iterative task completion:
 
 ```bash
-kai
+kai-code
 > /ralph start "Refactor the auth module"
 ```
 
@@ -257,6 +275,38 @@ from kai_code.prompts import load_prompt
 prompt = load_prompt("my-custom-prompt")
 ```
 
+### Auto-Update
+
+Kai can update itself directly from GitHub:
+
+```bash
+# Check for updates (interactive)
+kai-code
+> /update check
+
+# Show installation status
+kai-code
+> /update status
+
+# Apply updates (interactive)
+kai-code
+> /update
+```
+
+The auto-update system handles both editable (development) installs and regular pip installations:
+- **Editable installs**: Uses `git pull` to update
+- **Regular installs**: Uses `pip install --upgrade` to update
+
+### Token Usage Indicator
+
+When using models with context limits, Kai displays token usage in real-time:
+
+- **Green** (< 80%): Safe, plenty of context remaining
+- **Yellow** (80-95%): Approaching limit
+- **Red** (>= 95%): Near limit, consider truncating history
+
+The indicator appears in the status bar during interactive sessions.
+
 ## Project Structure
 
 ```
@@ -264,12 +314,17 @@ kai-code/
 ├── src/kai_code/
 │   ├── agent.py              # Base KaiAgent class
 │   ├── agents/
-│   │   └── dbt/              # DbtAgent and dbt tools
+│   │   ├── dbt/              # DbtAgent and dbt tools
+│   │   └── seeknal/          # SeeknalAgent (data engineering)
 │   ├── prompts/              # System prompts (markdown)
 │   ├── rich_*.py             # Rich CLI components
+│   ├── rich_ui/              # Rich UI application
+│   ├── tasks/                # Background task management
 │   ├── tools/                # Shared tools
 │   ├── memory/               # Memory management
-│   └── skills/               # Skill definitions
+│   ├── skills/               # Skill definitions
+│   ├── update.py             # Auto-update functionality
+│   └── models.json           # Available model configurations
 ├── docs/
 │   ├── tutorials/            # Step-by-step tutorials
 │   ├── guides/               # In-depth guides
@@ -304,7 +359,7 @@ python -m kai_code.smoke
 For programmatic consumption, use `--output-format stream-json`:
 
 ```bash
-kai -p "Hello" --output-format stream-json
+kai-code -p "Hello" --output-format stream-json
 ```
 
 Events emitted:
