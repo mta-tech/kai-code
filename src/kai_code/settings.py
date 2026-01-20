@@ -34,6 +34,17 @@ def local_settings_path(root_dir: Path) -> Path:
 
 
 @dataclass
+class CompactionConfig:
+    """Configuration for auto-compaction feature."""
+
+    enabled: bool = True
+    threshold: float = 0.85  # 85% context usage triggers compaction
+    recent_window_turns: int = 10  # Keep last N turns verbatim
+    min_time_between: int = 300  # 5 minutes in seconds
+    max_summary_tokens: int = 1000  # Target size per summary
+
+
+@dataclass
 class KaiSettings:
     """Merged settings across global/project/local files.
 
@@ -52,6 +63,9 @@ class KaiSettings:
     last_session: str | None = None
     agents: dict[str, str] | None = None
 
+    # Compaction
+    compaction: CompactionConfig | None = None
+
 
 def _merge_lists(base: list[str] | None, override: list[str] | None) -> list[str] | None:
     if override is None:
@@ -66,6 +80,24 @@ def _merge_dicts(base: dict[str, str] | None, override: dict[str, str] | None) -
     out.update(base or {})
     out.update(override or {})
     return out
+
+
+def _get_compaction_config(d: dict[str, Any]) -> CompactionConfig | None:
+    """Extract compaction configuration from settings dict."""
+    if "compaction" not in d:
+        return None
+
+    c = d["compaction"]
+    if not isinstance(c, dict):
+        return None
+
+    return CompactionConfig(
+        enabled=c.get("enabled", True),
+        threshold=c.get("threshold", 0.85),
+        recent_window_turns=c.get("recent_window_turns", 10),
+        min_time_between=c.get("min_time_between", 300),
+        max_summary_tokens=c.get("max_summary_tokens", 1000),
+    )
 
 
 def load_settings(root_dir: Path) -> KaiSettings:
@@ -144,6 +176,28 @@ def load_settings(root_dir: Path) -> KaiSettings:
     last_session = _get_str(l, "last_session")
     agents = _get_agents(l) or {}
 
+    # Merge compaction config with field-level precedence: local > project > global > defaults
+    # Only create config if explicitly set, then merge at field level
+    compaction = None
+
+    for d in [g, p, l]:
+        if "compaction" in d and isinstance(d["compaction"], dict):
+            c = d["compaction"]
+            if compaction is None:
+                # First compaction config - start with defaults then override with explicit values
+                compaction = CompactionConfig()
+            # Merge at field level: only override fields that are explicitly present
+            if "enabled" in c:
+                compaction.enabled = c["enabled"]
+            if "threshold" in c:
+                compaction.threshold = c["threshold"]
+            if "recent_window_turns" in c:
+                compaction.recent_window_turns = c["recent_window_turns"]
+            if "min_time_between" in c:
+                compaction.min_time_between = c["min_time_between"]
+            if "max_summary_tokens" in c:
+                compaction.max_summary_tokens = c["max_summary_tokens"]
+
     return KaiSettings(
         default_model=default_model,
         default_toolset=default_toolset,
@@ -154,6 +208,7 @@ def load_settings(root_dir: Path) -> KaiSettings:
         disallowed_commands=disallowed_commands,
         last_session=last_session,
         agents=agents,
+        compaction=compaction,
     )
 
 

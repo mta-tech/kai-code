@@ -9,6 +9,7 @@
 
 - **Intelligent Code Agents**: AI-powered assistants that understand your codebase
 - **Multiple LLM Support**: Works with OpenAI, Anthropic Claude, Google Gemini, and OpenRouter
+- **Auto-Compact**: Automatically compresses conversation history at 85% context usage
 - **Permission System**: Fine-grained control over what the agent can do
 - **Human-in-the-Loop**: Approval workflows for sensitive operations
 - **Session Persistence**: Resume conversations across restarts
@@ -110,6 +111,8 @@ kai-code -p "List all functions" --output-format json
 | `--model MODEL` | Specify the LLM model |
 | `--output-format` | Output format: `text`, `json`, `stream-json` |
 | `--dry-run` | Show configuration without running |
+| `--no-compact` | Disable auto-compaction |
+| `--compact-threshold PCT` | Set compaction threshold (0.0-1.0) |
 
 ### Slash Commands
 
@@ -138,6 +141,10 @@ Available in interactive mode:
 | `/update status` | Show installation status |
 | `/export-settings [file]` | Export settings to a file |
 | `/import-settings <file>` | Import settings from a file |
+| `/compact status` | Show auto-compact status |
+| `/compact now` | Manually trigger compaction |
+| `/compact enable` | Enable auto-compaction |
+| `/compact disable` | Disable auto-compaction |
 
 ### dbt-Specific Commands (kai-dbt)
 
@@ -296,6 +303,29 @@ kai-code
 The auto-update system handles both editable (development) installs and regular pip installations:
 - **Editable installs**: Uses `git pull` to update
 - **Regular installs**: Uses `pip install --upgrade` to update
+
+### Auto-Compact Configuration
+
+Auto-compact automatically compresses conversation history when approaching context limits:
+
+```json
+{
+  "compaction": {
+    "enabled": true,
+    "threshold": 0.85,
+    "recent_window_turns": 10,
+    "min_time_between": 300,
+    "max_summary_tokens": 1000
+  }
+}
+```
+
+**Settings:**
+- `enabled`: Enable/disable auto-compaction
+- `threshold`: Context usage percentage (0.0-1.0) to trigger
+- `recent_window_turns`: Number of recent turns to always keep verbatim
+- `min_time_between`: Minimum seconds between compactions (default: 300)
+- `max_summary_tokens`: Target size for each summary
 
 ### Token Usage Indicator
 

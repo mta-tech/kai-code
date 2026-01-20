@@ -370,3 +370,39 @@ class StreamingConversationManager:
         """Reset conversation state."""
         self.state = ConversationState()
         self._emit_event("conversation_reset", {})
+
+    def get_messages_for_compaction(self) -> list[dict]:
+        """Return all messages eligible for compaction.
+
+        Returns:
+            List of message dictionaries
+        """
+        return self.state.messages.copy()
+
+    def rebuild_with_compacted_history(
+        self,
+        kept_messages: list,
+        summaries: list[str],
+    ) -> None:
+        """Replace conversation history with compacted version.
+
+        Args:
+            kept_messages: Messages to keep verbatim
+            summaries: Generated summaries to prepend
+        """
+        # Clear current messages
+        self.state.messages.clear()
+
+        # Add summary as system message at the start
+        if summaries:
+            summary_msg = {
+                "role": "system",
+                "content": "\n\n".join(summaries),
+                "metadata": {"compacted": True}
+            }
+            self.state.messages.append(summary_msg)
+
+        # Add kept messages
+        self.state.messages.extend(kept_messages)
+
+        logger.info(f"Rebuilt conversation: {len(kept_messages)} kept + {len(summaries)} summaries")

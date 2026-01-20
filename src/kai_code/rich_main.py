@@ -159,6 +159,20 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         help="Force showing the Quick Start panel even if onboarding is complete",
     )
 
+    # Compaction flags
+    parser.add_argument(
+        "--no-compact",
+        action="store_true",
+        help="Disable auto-compaction",
+    )
+    parser.add_argument(
+        "--compact-threshold",
+        type=float,
+        default=None,
+        metavar="PCT",
+        help="Context usage threshold (0.0-1.0) for auto-compaction (default: 0.85)",
+    )
+
     return parser.parse_args(args)
 
 
@@ -335,12 +349,14 @@ def _create_kai_agent(
 async def simple_cli(
     initial_prompt: str | None = None,
     session_state: SessionState | None = None,
+    compaction_config=None,
 ) -> None:
     """Main interactive CLI loop using Rich and prompt-toolkit.
 
     Args:
         initial_prompt: Optional prompt to execute immediately on startup
         session_state: Session state (auto-approve, etc.) - created if not provided
+        compaction_config: Optional compaction configuration for auto-compaction
     """
     if session_state is None:
         session_state = SessionState()
@@ -390,6 +406,16 @@ async def simple_cli(
     # Create token tracker and image tracker
     token_tracker = TokenTracker()
     image_tracker = ImageTracker()
+
+    # Set up compaction manager if config is available
+    if compaction_config and compaction_config.enabled:
+        from kai_code.compaction.manager import CompactionManager
+
+        token_tracker.compaction_manager = CompactionManager(
+            threshold=compaction_config.threshold,
+            recent_window_turns=compaction_config.recent_window_turns,
+            min_time_between=compaction_config.min_time_between,
+        )
 
     # Background task callback for Ctrl+B
     def on_background_task(text: str, is_shell: bool) -> None:
@@ -589,6 +615,29 @@ def main(args: list[str] | None = None) -> int:
     # Get initial prompt from positional arguments
     initial_prompt = " ".join(parsed.prompt) if parsed.prompt else None
 
+    # Handle compaction overrides
+    compaction_config = None
+    if not parsed.no_compact:
+        from kai_code.settings import load_settings, CompactionConfig
+
+        # Load settings from files
+        root_dir = rich_settings.project_root or Path.cwd()
+        settings = load_settings(root_dir)
+
+        # Start with defaults or settings file
+        compaction_config = settings.compaction
+
+        # Apply CLI overrides
+        if compaction_config is None:
+            compaction_config = CompactionConfig()
+
+        if parsed.compact_threshold is not None:
+            compaction_config.threshold = parsed.compact_threshold
+
+    if parsed.no_compact:
+        # Disable compaction
+        compaction_config = None
+
     # Handle Ralph mode - activate loop before running CLI
     if parsed.ralph:
         # Need to create agent first to access ralph_manager
@@ -629,7 +678,11 @@ def main(args: list[str] | None = None) -> int:
     # Run the CLI
     try:
         asyncio.run(
-            simple_cli(initial_prompt=initial_prompt, session_state=session_state)
+            simple_cli(
+                initial_prompt=initial_prompt,
+                session_state=session_state,
+                compaction_config=compaction_config,
+            )
         )
         return 0
     except KeyboardInterrupt:

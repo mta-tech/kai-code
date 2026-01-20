@@ -3,6 +3,7 @@
 Adapted from deepagents-cli for kai-code.
 """
 
+import asyncio
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
@@ -107,6 +108,9 @@ def handle_command(
     if command == "/update" or command.startswith("/update "):
         _handle_update_command(command_input)
         return None
+
+    if command == "/compact" or command.startswith("/compact "):
+        return _handle_compact_command(command_input, agent, token_tracker)
 
     if command == "/version":
         _show_version()
@@ -744,4 +748,89 @@ def _show_version() -> None:
 
     console.print()
     console.print("[dim]Use /update to update from GitHub[/dim]")
+    console.print()
+
+
+def _handle_compact_command(command_input: str, agent, token_tracker) -> str | None:
+    """Handle /compact commands.
+
+    Commands:
+    - /compact status: Show compaction state
+    - /compact now: Manually trigger compaction
+    - /compact enable: Enable auto-compaction
+    - /compact disable: Disable auto-compaction
+    """
+    parts = command_input.strip().split()
+    subcommand = parts[1].lower() if len(parts) > 1 else "status"
+
+    from kai_code.compaction.manager import CompactionManager
+
+    console.print()
+
+    # Get compaction manager if exists
+    manager = getattr(token_tracker, "compaction_manager", None) if token_tracker else None
+
+    if subcommand == "status":
+        _show_compaction_status(manager)
+
+    elif subcommand == "now":
+        if not manager:
+            console.print("[yellow]Compaction not enabled[/yellow]")
+            console.print("Use --compact-threshold or enable in settings")
+            return None
+
+        # Manually trigger
+        usage = token_tracker.get_usage_percentage() if token_tracker else 0
+        console.print(f"[dim]Current usage: {usage:.1%}[/dim]")
+
+        if manager:
+            # Use fire-and-forget pattern (same as cli_ui.py)
+            asyncio.create_task(manager.check_and_compact(usage or 0))
+            console.print("[green]✓[/green] Compaction triggered")
+            console.print("[dim]Check status with /compact status[/dim]")
+
+    elif subcommand == "enable":
+        if not manager:
+            console.print("[yellow]Compaction manager not initialized[/yellow]")
+            console.print("Restart with --compact-threshold flag")
+        else:
+            console.print("[green]✓[/green] Compaction enabled")
+
+    elif subcommand == "disable":
+        if manager:
+            token_tracker.compaction_manager = None
+            console.print("[green]✓[/green] Compaction disabled for session")
+
+    else:
+        console.print("[bold]Compaction Commands[/bold]")
+        console.print()
+        console.print("  /compact status   - Show compaction state")
+        console.print("  /compact now      - Manually trigger compaction")
+        console.print("  /compact enable   - Enable auto-compaction")
+        console.print("  /compact disable  - Disable auto-compaction")
+        console.print()
+
+    return None
+
+
+def _show_compaction_status(manager: "CompactionManager | None") -> None:
+    """Display current compaction status."""
+    if not manager:
+        console.print("[dim]Compaction: [yellow]disabled[/yellow][/dim]")
+        return
+
+    console.print("[bold]Compaction Status[/bold]")
+    console.print()
+    console.print(f"State: [cyan]{manager.state.value}[/cyan]")
+    console.print(f"Threshold: [cyan]{manager.threshold:.1%}[/cyan]")
+    console.print(f"Recent window: [cyan]{manager.recent_window_turns} turns[/cyan]")
+
+    if manager.last_compaction_time:
+        import time
+
+        elapsed = time.time() - manager.last_compaction_time
+        console.print(f"Last run: [cyan]{elapsed:.0f}s ago[/cyan]")
+    else:
+        console.print("Last run: [dim]never[/dim]")
+
     console.print()

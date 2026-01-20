@@ -3,11 +3,15 @@
 Adapted from deepagents-cli for kai-code.
 """
 
+import asyncio
 import json
 import re
 import shutil
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional
+
+if TYPE_CHECKING:
+    from kai_code.compaction.manager import CompactionManager
 
 from rich import box
 from rich.markup import escape
@@ -188,6 +192,9 @@ class TokenTracker:
         self._warned_80: bool = False  # Track if 80% warning has been shown
         self._warned_95: bool = False  # Track if 95% warning has been shown
 
+        # Compaction manager (set externally if enabled)
+        self.compaction_manager: Optional[CompactionManager] = None
+
     @property
     def context_limit(self) -> Optional[int]:
         """Get the context limit for the current model."""
@@ -291,6 +298,40 @@ class TokenTracker:
         # input_tokens IS the current context size (what was sent to the model)
         self.current_context = input_tokens
         self.last_output = output_tokens
+
+    def add_tokens(
+        self,
+        count: int,
+        is_output: bool = False,
+    ) -> None:
+        """Add tokens to the running total.
+
+        Args:
+            count: Number of tokens to add
+            is_output: True if these are output tokens (for tracking)
+        """
+        self.current_context += count
+        if is_output:
+            self.last_output = count
+
+        # Check compaction threshold
+        if self.compaction_manager:
+            percentage = self.get_usage_percentage()
+            if percentage is not None:
+                # Create async task for compaction check (fire-and-forget)
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        asyncio.create_task(
+                            self.compaction_manager.check_and_compact(percentage)
+                        )
+                    else:
+                        # If no event loop, compaction will be skipped
+                        # This is acceptable for synchronous contexts
+                        pass
+                except RuntimeError:
+                    # No event loop available, skip compaction check
+                    pass
 
     def display_last(self) -> None:
         """Display current context size after this turn."""
