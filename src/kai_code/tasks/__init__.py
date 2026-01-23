@@ -73,6 +73,10 @@ from .tools import (
 from .registry import AgentTaskRegistry, get_agent_task_registry
 from .active_agents import ActiveAgentRegistry, get_active_agent_registry
 from .notifier import TaskCompletionNotifier
+from .hybrid_manager import (
+    HybridTaskManager,
+    get_hybrid_task_manager,
+)
 
 __all__ = [
     "Task",
@@ -97,4 +101,6 @@ __all__ = [
     "ActiveAgentRegistry",
     "get_active_agent_registry",
     "TaskCompletionNotifier",
+    "HybridTaskManager",
+    "get_hybrid_task_manager",
 ]
