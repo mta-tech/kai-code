@@ -346,8 +346,9 @@ class HybridTaskManager:
         # Shutdown thread pool (timeout parameter not available in Python <3.9)
         self._agent_executor.shutdown(wait=True)
 
-        # Clean up
+        # Clean up all resources
         self._tracked_tasks.clear()
+        self._tasks.clear()
 
 
 # Global singleton instance
