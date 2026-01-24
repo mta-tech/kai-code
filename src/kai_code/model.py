@@ -12,6 +12,13 @@ from typing import Callable
 DEFAULT_CONTEXT_WINDOW = 128000
 
 
+# Import load_dotenv if available (for .env file support)
+try:
+    from .envfile import load_dotenv
+except ImportError:
+    load_dotenv = None  # type: ignore
+
+
 @dataclass(frozen=True)
 class ModelInfo:
     """Minimal model metadata (TS parity: models.json in letta-code)."""
@@ -344,7 +351,13 @@ def get_default_model() -> str:
     3. OpenAI GPT (if OPENAI_API_KEY set)
     4. OpenRouter (if OPENROUTER_API_KEY set)
     5. Static fallback
+
+    Loads API keys from .env files before checking environment.
     """
+    # Load .env files to get API keys
+    if load_dotenv is not None:
+        load_dotenv()
+
     # Check which API keys are available (priority order)
     primary_provider = None
     if os.environ.get("GOOGLE_API_KEY"):

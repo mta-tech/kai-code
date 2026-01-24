@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 from typing import Callable
 
 from rich.console import Console
@@ -14,6 +15,7 @@ from rich.box import ROUNDED
 from .model import models, models_static, ModelInfo, resolve_model, get_default_model
 from .errors import ActionableError, ErrorType, render_error
 from .error_suggestions import PROVIDER_API_KEY_INSTRUCTIONS
+from .envfile import load_dotenv
 
 console = Console(highlight=False)
 
@@ -50,9 +52,15 @@ def detect_primary_provider() -> str | None:
     Uses priority order to choose the preferred provider when multiple
     API keys are configured.
 
+    First loads API keys from .env files (current directory and project root),
+    then checks environment variables.
+
     Returns:
         Provider name (e.g., "google_genai", "anthropic") or None
     """
+    # Load .env files to get API keys
+    load_dotenv()
+
     providers_with_keys = []
 
     # Check which providers have API keys
