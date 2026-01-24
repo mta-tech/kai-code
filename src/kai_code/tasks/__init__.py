@@ -156,6 +156,10 @@ from .migration import (
     migrate_old_task,
     migrate_task_manager_state,
 )
+from .hybrid_notifier import (
+    HybridTaskAdapter,
+    HybridTaskCompletionNotifier,
+)
 
 __all__ = [
     "Task",
@@ -187,4 +191,6 @@ __all__ = [
     "MigratedTask",
     "migrate_old_task",
     "migrate_task_manager_state",
+    "HybridTaskAdapter",
+    "HybridTaskCompletionNotifier",
 ]

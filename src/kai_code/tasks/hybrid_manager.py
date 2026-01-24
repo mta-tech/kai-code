@@ -356,21 +356,35 @@ _hybrid_task_manager: HybridTaskManager | None = None
 
 
 def get_hybrid_task_manager() -> HybridTaskManager:
-    """Get the global HybridTaskManager instance."""
+    """Get the global HybridTaskManager instance.
+
+    Initializes the singleton and registers auto-nudge callback
+    for agent notification when tasks complete.
+    """
     global _hybrid_task_manager
     if _hybrid_task_manager is None:
         _hybrid_task_manager = HybridTaskManager()
 
-        # TODO: Register completion callback for auto-nudge
-        # The TaskCompletionNotifier expects the old Task type from task.py
-        # We need to create an adapter to bridge the types during Phase 3
-        # from .notifier import TaskCompletionNotifier
-        # from .registry import get_agent_task_registry
-        # from .active_agents import get_active_agent_registry
-        # notifier = TaskCompletionNotifier(
-        #     get_agent_task_registry(),
-        #     get_active_agent_registry(),
-        # )
-        # _hybrid_task_manager.on_task_complete(notifier)
+        # Register auto-nudge callback for agent notification
+        # The TaskCompletionNotifier expects the old Task type from task.py,
+        # so we use HybridTaskCompletionNotifier to adapt the new Task type.
+        try:
+            from .notifier import TaskCompletionNotifier
+            from .registry import get_agent_task_registry
+            from .active_agents import get_active_agent_registry
+            from .hybrid_notifier import HybridTaskCompletionNotifier
+
+            # Create legacy notifier
+            legacy_notifier = TaskCompletionNotifier(
+                get_agent_task_registry(),
+                get_active_agent_registry(),
+            )
+            # Wrap with adapter to handle new Task type
+            notifier = HybridTaskCompletionNotifier(legacy_notifier)
+            # Register callback with hybrid manager
+            _hybrid_task_manager.on_task_complete(notifier)
+        except ImportError:
+            # Dependencies not available (e.g., in minimal installs)
+            pass
 
     return _hybrid_task_manager
