@@ -1,0 +1,11 @@
+{
+  "dataset_shape": [
+    60912,
+    58
+  ],
+  "total_customers": 51811,
+  "predicted_churn_rate": 0.4506337010769635,
+  "avg_churn_probability": 0.4528335745817751,
+  "high_risk_customers": 6311,
+  "timestamp": "2026-01-08T16:25:03.978587"
+}

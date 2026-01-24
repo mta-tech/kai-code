@@ -166,9 +166,18 @@ class KaiRichApp:
         self.console_manager.update_messages(self.message_display.render())
         self.console_manager.update_tools(self.tool_display.render())
         
-        # Update footer with hints
-        footer_content = "[dim]Type /help for commands • Ctrl+C to interrupt[/dim]"
-        self.console_manager.update_footer(footer_content)
+        # Update footer with hints and token usage
+        from rich.text import Text
+        footer_text = Text()
+        footer_text.append("Type /help for commands • Ctrl+C to interrupt", style="dim")
+        
+        # Add token display on the right side
+        token_display = self.status_bar.render_token_display()
+        if token_display.plain:
+            footer_text.append("  │  ", style="dim")
+            footer_text.append_text(token_display)
+        
+        self.console_manager.update_footer(footer_text)
     
     def _handle_user_message(self, message: str):
         """Handle a message from the user."""

@@ -1,0 +1,18 @@
+version: 2
+
+models:
+  - name: fct_business_summary
+    description: "High-level business metrics for Green Taxi trips in May 2023."
+    columns:
+      - name: total_trips
+        description: "Total number of trips recorded."
+        tests:
+          - not_null
+      - name: total_revenue
+        description: "Total revenue from all trips (total_amount)."
+      - name: total_passengers
+        description: "Total number of passengers carried."
+      - name: avg_trip_distance
+        description: "Average distance per trip in miles."
+      - name: avg_tip_amount
+        description: "Average tip amount per trip."

@@ -47,11 +47,6 @@ class RichStatusBar:
         content.append("│ YOLO: ", style="bold")
         content.append(f"{yolo_status}", style=yolo_style)
 
-        # Token usage (if token tracker is provided)
-        if self._token_indicator is not None:
-            content.append(" │ ", style="bold")
-            content.append_text(self._token_indicator.render_with_label("Tokens"))
-
         return Panel(
             content,
             title="[bold blue]Kai Code[/bold blue]",
@@ -87,3 +82,13 @@ class RichStatusBar:
     def token_tracker(self) -> "TokenTracker | None":
         """Get the current token tracker."""
         return self._token_tracker
+
+    def render_token_display(self) -> Text:
+        """Render the token display for use in footer.
+
+        Returns:
+            Text object with token info, or empty Text if no token tracker
+        """
+        if self._token_indicator is not None:
+            return self._token_indicator.render_with_label("Tokens")
+        return Text()

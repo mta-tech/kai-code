@@ -1,0 +1,6 @@
+green_taxi:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: green_taxi.duckdb

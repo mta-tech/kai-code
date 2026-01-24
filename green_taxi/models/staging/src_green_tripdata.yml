@@ -1,0 +1,8 @@
+version: 2
+
+sources:
+  - name: raw_data
+    meta:
+      external_location: "green_tripdata_2023-05.parquet"
+    tables:
+      - name: green_tripdata

@@ -1,0 +1,20 @@
+version: 2
+
+models:
+  - name: fct_monthly_trip_metrics
+    description: "Monthly business metrics for green taxi trips aggregated by pickup location."
+    columns:
+      - name: pickup_location_id
+        description: "The ID of the zone where the trip started."
+        tests:
+          - not_null
+      - name: total_trips
+        description: "Metric 1: Total volume of trips (Trip Volume)."
+      - name: total_revenue
+        description: "Metric 2: Gross revenue including all fees and tips (Gross Revenue)."
+      - name: avg_distance
+        description: "Metric 3: Average distance traveled per trip in miles (Avg Distance)."
+      - name: avg_tip_percentage
+        description: "Metric 4: Average tip as a percentage of the base fare (Avg Tip %)."
+      - name: avg_duration_minutes
+        description: "Metric 5: Average duration of trips in minutes (Avg Duration)."
