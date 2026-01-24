@@ -25,22 +25,85 @@ COLORS = {
     "default": "#8b5cf6",
 }
 
+# Provider detection priority (higher = preferred)
+PROVIDER_PRIORITY = {
+    "google_genai": 100,  # Google Gemini (highest priority)
+    "google": 100,        # Alternative Google provider name
+    "anthropic": 50,      # Anthropic Claude
+    "openai": 40,         # OpenAI GPT
+    "openrouter": 10,     # OpenRouter (lowest priority)
+}
 
-def get_available_models(use_static: bool = False) -> list[ModelInfo]:
+# Provider display names
+PROVIDER_NAMES = {
+    "google_genai": "Google Gemini",
+    "google": "Google Gemini",
+    "anthropic": "Anthropic Claude",
+    "openai": "OpenAI",
+    "openrouter": "OpenRouter",
+}
+
+
+def detect_primary_provider() -> str | None:
+    """Detect the primary provider based on available API keys.
+
+    Uses priority order to choose the preferred provider when multiple
+    API keys are configured.
+
+    Returns:
+        Provider name (e.g., "google_genai", "anthropic") or None
+    """
+    providers_with_keys = []
+
+    # Check which providers have API keys
+    if os.environ.get("GOOGLE_API_KEY"):
+        providers_with_keys.append(("google_genai", PROVIDER_PRIORITY["google_genai"]))
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        providers_with_keys.append(("anthropic", PROVIDER_PRIORITY["anthropic"]))
+    if os.environ.get("OPENAI_API_KEY"):
+        providers_with_keys.append(("openai", PROVIDER_PRIORITY["openai"]))
+    if os.environ.get("OPENROUTER_API_KEY"):
+        providers_with_keys.append(("openrouter", PROVIDER_PRIORITY["openrouter"]))
+
+    if not providers_with_keys:
+        return None
+
+    # Sort by priority (descending) and return the highest priority provider
+    providers_with_keys.sort(key=lambda x: x[1], reverse=True)
+    return providers_with_keys[0][0]
+
+
+def get_available_models(
+    use_static: bool = False,
+    provider_filter: str | None = None,
+) -> list[ModelInfo]:
     """Get list of available models with API key checks.
 
     Args:
         use_static: If True, use static models only (no API calls)
+        provider_filter: If specified, only show models from this provider
 
     Returns:
         List of ModelInfo objects for models that have configured API keys
     """
+    # Auto-detect primary provider if not specified
+    if provider_filter is None:
+        provider_filter = detect_primary_provider()
+
     # Get models - dynamic from APIs or static fallback
     all_models = models_static() if use_static else models()
     available = []
 
     for model in all_models:
         provider = model.provider or (model.handle.split(":")[0] if ":" in model.handle else "")
+
+        # Normalize provider names
+        if provider == "google":
+            provider = "google_genai"
+
+        # If provider filter is set, only include models from that provider
+        if provider_filter and provider != provider_filter:
+            continue
 
         # Check if API key is configured for this provider
         has_key = False
@@ -50,6 +113,8 @@ def get_available_models(use_static: bool = False) -> list[ModelInfo]:
             has_key = bool(os.environ.get("OPENAI_API_KEY"))
         elif provider in ("google_genai", "google"):
             has_key = bool(os.environ.get("GOOGLE_API_KEY"))
+        elif provider == "openrouter":
+            has_key = bool(os.environ.get("OPENROUTER_API_KEY"))
         else:
             # Unknown provider - include it anyway
             has_key = True
@@ -73,7 +138,12 @@ def show_model_selector(
     Returns:
         Selected ModelInfo or None if cancelled
     """
-    available = get_available_models()
+    # Detect primary provider
+    primary_provider = detect_primary_provider()
+    provider_name = PROVIDER_NAMES.get(primary_provider, "") if primary_provider else None
+
+    # Get available models (filtered to primary provider)
+    available = get_available_models(provider_filter=primary_provider)
 
     if not available:
         # Build suggestions with provider-specific instructions
@@ -82,7 +152,7 @@ def show_model_selector(
         ]
 
         # Add provider-specific setup instructions
-        for provider in ["anthropic", "openai", "google"]:
+        for provider in ["google", "anthropic", "openai"]:
             info = PROVIDER_API_KEY_INSTRUCTIONS.get(provider, {})
             env_var = info.get("env_var", "")
             description = info.get("description", provider.title())
@@ -91,7 +161,7 @@ def show_model_selector(
 
         # Build recovery commands for setting up API keys
         recovery_commands = []
-        for provider in ["anthropic", "openai", "google"]:
+        for provider in ["google", "anthropic", "openai"]:
             info = PROVIDER_API_KEY_INSTRUCTIONS.get(provider, {})
             env_var = info.get("env_var", "")
             url = info.get("url", "")
@@ -107,7 +177,7 @@ def show_model_selector(
             recovery_commands=recovery_commands,
             severity="warning",
             context={
-                "checked_providers": "anthropic, openai, google",
+                "checked_providers": "google (GOOGLE_API_KEY), anthropic (ANTHROPIC_API_KEY), openai (OPENAI_API_KEY)",
             },
         )
         render_error(error, console)
@@ -133,7 +203,7 @@ def show_model_selector(
             tty.setcbreak(sys.stdin.fileno())
 
             while True:
-                _render_model_list(available, selected_idx, current_model)
+                _render_model_list(available, selected_idx, current_model, provider_name)
 
                 # Read key
                 key = sys.stdin.read(1)
@@ -181,6 +251,7 @@ def _render_model_list(
     models_list: list[ModelInfo],
     selected_idx: int,
     current_model: str | None = None,
+    provider_name: str | None = None,
 ) -> None:
     """Render the model selection list."""
     console.clear()
@@ -189,7 +260,7 @@ def _render_model_list(
     table.add_column("Num", style="dim", width=3)
     table.add_column("Select", width=2)
     table.add_column("Model", min_width=20)
-    table.add_column("Provider", min_width=30)
+    table.add_column("Handle", min_width=30)
     table.add_column("Status", width=12)
 
     for i, model in enumerate(models_list):
@@ -206,8 +277,8 @@ def _render_model_list(
         # Model name
         model_name = model.id
 
-        # Provider (extract from handle)
-        provider = model.handle
+        # Handle (provider:model format)
+        handle = model.handle
 
         # Status badges
         status_parts = []
@@ -222,7 +293,7 @@ def _render_model_list(
                 Text(num, style="bold cyan"),
                 Text(prefix, style="bold cyan"),
                 Text(model_name, style="bold"),
-                Text(provider, style="bold dim"),
+                Text(handle, style="bold dim"),
                 Text(status, style="bold green" if is_current else "bold " + COLORS["default"]),
             )
         else:
@@ -230,7 +301,7 @@ def _render_model_list(
                 Text(num, style="dim"),
                 prefix,
                 model_name,
-                Text(provider, style="dim"),
+                Text(handle, style="dim"),
                 Text(status, style="green" if is_current else COLORS["default"]),
             )
 
@@ -251,9 +322,14 @@ def _render_model_list(
     from rich.console import Group
     content = Group(table, Text(), help_text)
 
+    # Title with provider info
+    title = "Select Model"
+    if provider_name:
+        title = f"Select Model ({provider_name})"
+
     panel = Panel(
         content,
-        title="Select Model",
+        title=title,
         subtitle=f"{len(models_list)} available",
         border_style=COLORS["primary"],
         box=ROUNDED,

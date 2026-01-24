@@ -336,19 +336,49 @@ def resolve_model(model_identifier: str) -> str | None:
 
 
 def get_default_model() -> str:
-    """Get the default model handle."""
-    # First check cached/API models
-    for m in models():
-        if m.is_default:
-            return m.handle
+    """Get the default model handle.
+
+    Prioritizes models based on available API keys:
+    1. Google Gemini (if GOOGLE_API_KEY set)
+    2. Anthropic Claude (if ANTHROPIC_API_KEY set)
+    3. OpenAI GPT (if OPENAI_API_KEY set)
+    4. OpenRouter (if OPENROUTER_API_KEY set)
+    5. Static fallback
+    """
+    # Check which API keys are available (priority order)
+    primary_provider = None
+    if os.environ.get("GOOGLE_API_KEY"):
+        primary_provider = "google_genai"
+    elif os.environ.get("ANTHROPIC_API_KEY"):
+        primary_provider = "anthropic"
+    elif os.environ.get("OPENAI_API_KEY"):
+        primary_provider = "openai"
+    elif os.environ.get("OPENROUTER_API_KEY"):
+        primary_provider = "openrouter"
+
+    # First check cached/API models for primary provider
+    all_models = models()
+    if primary_provider and all_models:
+        # Find first model from primary provider
+        for m in all_models:
+            provider = m.provider
+            if provider == "google":  # Normalize google to google_genai
+                provider = "google_genai"
+            if provider == primary_provider:
+                return m.handle
+        # Fall back to any model with is_default set
+        for m in all_models:
+            if m.is_default:
+                return m.handle
+        # Last resort from API models
+        return all_models[0].handle
+
     # Fall back to static models
     for m in _STATIC_MODELS:
         if m.is_default:
             return m.handle
-    # Last resort
-    all_models = models()
-    if all_models:
-        return all_models[0].handle
+
+    # Last resort - first static model
     return _STATIC_MODELS[0].handle
 
 
