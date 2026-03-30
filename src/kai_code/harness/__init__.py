@@ -38,7 +38,11 @@ __all__ = [
     # Memory
     'TrajectoryMemoryStore',
     'Trajectory',
-    'ExecutionStep'
+    'ExecutionStep',
+    
+    # Integration
+    'HarnessIntegration',
+    'create_harness'
 ]
 
 __version__ = '0.2.0'
