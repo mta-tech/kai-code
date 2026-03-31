@@ -24,6 +24,11 @@ from .memory.trajectory_store import (
     ExecutionStep
 )
 
+from .integration import (
+    HarnessIntegration,
+    create_harness
+)
+
 __all__ = [
     # Middleware
     'PreCompletionChecklistMiddleware',
