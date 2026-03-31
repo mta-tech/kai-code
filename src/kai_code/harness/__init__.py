@@ -24,6 +24,11 @@ from .memory.trajectory_store import (
     ExecutionStep
 )
 
+from .integration import (
+    HarnessIntegration,
+    create_harness
+)
+
 __all__ = [
     # Middleware
     'PreCompletionChecklistMiddleware',
@@ -38,7 +43,11 @@ __all__ = [
     # Memory
     'TrajectoryMemoryStore',
     'Trajectory',
-    'ExecutionStep'
+    'ExecutionStep',
+    
+    # Integration
+    'HarnessIntegration',
+    'create_harness'
 ]
 
 __version__ = '0.2.0'
