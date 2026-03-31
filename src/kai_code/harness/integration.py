@@ -18,7 +18,7 @@ from .middleware import (
     LoopDetectionMiddleware,
     CheckResult
 )
-from .memory import TrajectoryMemoryStore, Trajectory, ExecutionStep
+from .memory.trajectory_store import TrajectoryMemoryStore, Trajectory, ExecutionStep
 
 
 class HarnessIntegration:
