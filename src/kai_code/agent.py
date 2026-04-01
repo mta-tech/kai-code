@@ -29,6 +29,7 @@ from .tools.web import http_request as _http_request, web_search as _web_search,
 from .tasks import BACKGROUND_TASK_TOOLS
 from .ralph_loop import RalphLoopManager
 from .hooks.ralph_stop_hook import RalphStopHook
+from .cost_tracking import UsageSummary, CostTracker
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,7 @@ class KaiResult:
     messages: list[dict[str, Any]]
     raw: dict[str, Any]
     stats: RunStats | None = None
+    usage: UsageSummary | None = None
 
 
 def _ensure_parent(path: Path) -> None:
@@ -215,6 +217,9 @@ class KaiAgent:
         self._ralph_manager = RalphLoopManager(root)
         self._ralph_hook = RalphStopHook(self._ralph_manager)
 
+        # Initialize cost tracking
+        self._cost_tracker = CostTracker()
+
         # Initialize skills system
         if memory_manager:
             initialize_skills_system(root, self._config.skills_dir, memory_manager)
@@ -247,6 +252,16 @@ class KaiAgent:
     def ralph_manager(self) -> RalphLoopManager:
         """The Ralph loop manager for autonomous operation."""
         return self._ralph_manager
+
+    @property
+    def cost_tracker(self) -> CostTracker:
+        """The cost tracker for usage monitoring."""
+        return self._cost_tracker
+
+    @property
+    def total_usage(self) -> UsageSummary:
+        """Get total usage across all sessions."""
+        return self._cost_tracker.get_total()
 
     def _get_base_prompt_name(self) -> str:
         """Get the name of the base prompt to load.
@@ -655,7 +670,7 @@ class KaiAgent:
             prompt: User prompt to execute.
 
         Returns:
-            KaiResult with output, messages, and raw state.
+            KaiResult with output, messages, raw state, and usage tracking.
         """
         graph = self._build_graph()
         # deepagents uses LangChain message objects internally, but accepts dict-style too.
@@ -675,7 +690,19 @@ class KaiAgent:
             else:
                 output = last.get("content") or ""
 
-        result = KaiResult(output=output, messages=list(self._messages), raw=state)
+        # Track usage (estimate if exact counts not available)
+        usage = UsageSummary().add_turn(
+            prompt=prompt,
+            output=output,
+        )
+        self._cost_tracker.add_session(self._thread_id, usage)
+
+        result = KaiResult(
+            output=output, 
+            messages=list(self._messages), 
+            raw=state,
+            usage=usage,
+        )
 
         # Check Ralph stop hook - enables autonomous loops
         should_continue, next_prompt = self._ralph_hook.on_agent_complete(self, result)
