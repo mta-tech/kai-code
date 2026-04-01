@@ -5,31 +5,29 @@ build-backend = "hatchling.build"
 [project]
 name = "kai-code"
 version = "0.1.0"
-description = "Local AI coding agent built on LangChain deepagents"
+description = "Local AI coding agent built on pydantic-deepagents"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Kai Code" }]
 
 dependencies = [
-  "deepagents>=0.2.8",
-  "langchain-google-genai>=4.1.2",
-  "langchain-openai>=0.2.0",
+  "pydantic-deep>=0.3.0",
+  "pydantic-ai>=1.71.0",
   "prompt-toolkit>=3.0.52",
   "rich>=13.0.0",
   "requests",
   "tavily-python",
   "python-dotenv",
   "markdownify>=0.13.0",
-  "langchain>=1.0.7",
   "pillow>=10.0.0",
 ]
 
 [project.optional-dependencies]
-openai = ["langchain-openai>=0.2.0"]
-anthropic = ["langchain-anthropic>=0.2.0"]
-google-genai = ["langchain-google-genai>=2.0.0"]
-openrouter = ["langchain-openai>=0.2.0"]
+openai = ["pydantic-ai[openai]>=1.71.0"]
+anthropic = ["pydantic-ai[anthropic]>=1.71.0"]
+google-genai = ["pydantic-ai[google-gla]>=1.71.0"]
+openrouter = ["pydantic-ai[openai]>=1.71.0"]
 letta = ["letta-client>=1.0.0"]
 dbt = ["duckdb>=1.0.0", "psycopg[binary]>=3.0.0"]
 dbt-duckdb = ["duckdb>=1.0.0"]
